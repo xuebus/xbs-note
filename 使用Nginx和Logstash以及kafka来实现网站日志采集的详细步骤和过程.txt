@@ -1,0 +1,715 @@
+使用Nginx和Logstash以及kafka来实现网站日志采集的详细步骤和过程
+
+
+环境介绍：
+linux虚拟机3台，主机名分别为hadoop01、hadoop02和hadoop03;
+在这3台虚拟机上分别部署了3个Zookeeper，这里Zookeeper的具体安装步骤不做介绍;
+在这3台虚拟机上分别部署了3个kafka，这里kafka的具体安装步骤也不做介绍;
+我们在hadoop02这台机器上安装一个Logstash，其安装过程非常简单，解压既可使用;
+========================================================================================================
+
+首先是在hadoop02这台机器上部署一个nginx，不过这个nginx不是一般的nginx，它使用了lua等插件。
+所以其安装步骤比较复杂，在本文的后面我们会有详细的安装步骤和安装记录。
+
+假如现在我们hadoop02这台机器上的nginx安装好了，我们来修改nginx的配置文件"nginx.conf"。
+将"nginx.conf"中原来的内容都清除，用下面的内容替换：
+worker_processes  2;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    log_format tick "$msec^A$remote_addr^A$u_domain^A$u_url^A$u_title^A$u_referrer^A$u_sh^A$u_sw^A$u_cd^A$u_lang^A$http_user_agent^A$u_utrace^A$u_account";
+    
+    access_log  logs/access.log  tick;
+
+    sendfile        on;
+
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  localhost;
+
+			location /log.gif {
+					default_type image/gif;    
+					access_log off;
+
+					access_by_lua "
+							local uid = ngx.var.cookie___utrace        
+							if not uid then
+									uid = ngx.md5(ngx.now() .. ngx.var.remote_addr .. ngx.var.http_user_agent)
+							end 
+							ngx.header['Set-Cookie'] = {'__utrace=' .. uid .. '; path=/'}
+							if ngx.var.arg_domain then
+									ngx.location.capture('/i-log?' .. ngx.var.args .. '&utrace=' .. uid)
+							end 
+					";  
+
+					add_header Expires "Fri, 01 Jan 1980 00:00:00 GMT";
+					add_header Pragma "no-cache";
+					add_header Cache-Control "no-cache, max-age=0, must-revalidate";
+
+					empty_gif;
+			}   
+
+			location /i-log {
+					internal;
+
+					set_unescape_uri $u_domain $arg_domain;
+					set_unescape_uri $u_url $arg_url;
+					set_unescape_uri $u_title $arg_title;
+					set_unescape_uri $u_referrer $arg_referrer;
+					set_unescape_uri $u_sh $arg_sh;
+					set_unescape_uri $u_sw $arg_sw;
+					set_unescape_uri $u_cd $arg_cd;
+					set_unescape_uri $u_lang $arg_lang;
+					set_unescape_uri $u_utrace $arg_utrace;
+					set_unescape_uri $u_account $arg_account;
+
+					log_subrequest on;
+					access_log /var/nginx_logs/track.log tick;
+
+					echo '';
+			}
+
+    }
+}
+
+在hadoop02机器的"/var/nginx_logs/"目录下面创建一个"track.log"文件。
+
+在hadoop02机器的"/usr/local/nginx/html/"目录下面新建一个"track.js"文件，文件内容如下：
+
+(function () {
+    var params = {};
+    //Document对象数据
+    if(document) {
+        params.domain = document.domain || ''; 
+        params.url = document.URL || ''; 
+        params.title = document.title || ''; 
+        params.referrer = document.referrer || ''; 
+    }   
+    //Window对象数据
+    if(window && window.screen) {
+        params.sh = window.screen.height || 0;
+        params.sw = window.screen.width || 0;
+        params.cd = window.screen.colorDepth || 0;
+    }   
+    //navigator对象数据
+    if(navigator) {
+        params.lang = navigator.language || ''; 
+    }   
+    //解析_maq配置
+    if(_maq) {
+        for(var i in _maq) {
+            switch(_maq[i][0]) {
+                case '_setAccount':
+                    params.account = _maq[i][1];
+                    break;
+                default:
+                    break;
+            }   
+        }   
+    }   
+    //拼接参数串
+    var args = ''; 
+    for(var i in params) {
+        if(args != '') {
+            args += '&';
+        }   
+        args += i + '=' + encodeURIComponent(params[i]);
+    }   
+ 
+    //通过Image对象请求后端脚本
+    var img = new Image(1, 1); 
+    img.src = 'http://hadoop02/log.gif?' + args;
+
+})();
+
+[root@hadoop02 conf]# 
+[root@hadoop02 conf]# cd ../html/
+[root@hadoop02 html]# ll
+total 12
+-rw-r--r--. 1 root root  537 Dec 31 08:02 50x.html
+-rw-r--r--. 1 root root  612 Dec 31 08:02 index.html
+-rw-r--r--. 1 root root 1237 Dec 31 08:16 track.js
+
+在要统计的页面添加如下js脚本，假如我们在"taotao-portal"项目的"index.jsp"的最下面的"</body>"标签前面添加该脚本：
+<script type="text/javascript">
+	var _maq = _maq || [];
+	_maq.push(['_setAccount', 'zx5352']);
+ 
+	(function() {
+		var ma = document.createElement('script'); 
+		ma.type = 'text/javascript';
+		ma.async = true;
+		ma.src = 'http://hadoop02/track.js';
+		var s = document.getElementsByTagName('script')[0]; 
+		s.parentNode.insertBefore(ma, s);
+	})();
+</script>
+
+
+
+在3台机器上的/root/apps/目录下面分别部署一个kafka，并使用如下命令启动3台机器上的kafka服务器：
+/root/apps/kafka/bin/kafka-server-start.sh /root/apps/kafka/config/server.properties
+
+在任意一台kafka服务器上查看一下kafka中的topic：
+/root/apps/kafka/bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+在任意一台kafka服务器上创建一个名为accesslog的topic：
+/root/apps/kafka/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 3 --partitions 3 --topic accesslog
+
+在任意一台kafka服务器上再查看一下kafka中的topic是否创建成功：
+/root/apps/kafka/bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+使用如下命令启动hadoop02机器上的nginx服务器：
+/usr/local/nginx/sbin/nginx
+
+然后在浏览器中访问如下地址，应该可以看到nginx的主界面：
+http://hadoop02/
+然后我们再在浏览器中访问如下地址，应该可以看到track.js中的内容：
+http://hadoop02/track.js
+
+将Logstash部署到hadoop02的/root/apps/目录下;
+在hadoop02机器的/root/apps/目录下创建flow-kafka.conf文件，文件内容如下：
+
+input {
+  file {
+    path => "/var/nginx_logs/*.log"
+    discover_interval => 5
+    start_position => "beginning" 
+  }
+}
+output {
+    kafka {
+          topic_id => "accesslog"
+          codec => plain {
+        format => "%{message}"
+      }
+          bootstrap_servers => "192.168.71.11:9092,192.168.71.12:9092,192.168.71.13:9092"
+    }
+}
+
+启动Logstash，并指定刚才创建的flow-kafka.conf文件：
+logstash/bin/logstash -f flow-kafka.conf
+
+
+在任意一台机器上启动一个kafka的消费者，来消费"accesslog"这个topic中的消息：
+/root/apps/bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic accesslog --from-beginning
+ 
+将我们的"taotao-portal"项目所在tomcat服务器启动，访问首页的index.jsp页面，
+此时在"hadoop02"的"/var/nginx_logs/"目录下面应该看到"track.log"文件会有日志输出。
+并且在我们上面启动的那个kafka的消费者会有消费被消费。
+
+
+我们的"taotao-portal"项目位于hadoop01这台服务器上，所以kafka消费者消费到如下消息：
+1483210782.201^A192.168.71.1^Ahadoop01^Ahttp://hadoop01:8808/^A\xE6\xB7\x98\xE6\xB7\x98\xE7\xBD\x91\xE4\xB8\x8A\xE5\x95\x86\xE5\x9F\x8E-\xE7\xBB\xBC\xE5\x90\x88\xE7\xBD\x91\xE8\xB4\xAD\xE9\xA6\x96\xE9\x80\x89\xEF\xBC\x88JD.COM\xEF\xBC\x89-\xE6\xAD\xA3\xE5\x93\x81\xE4\xBD\x8E\xE4\xBB\xB7\xE3\x80\x81\xE5\x93\x81\xE8\xB4\xA8\xE4\xBF\x9D\xE9\x9A\x9C\xE3\x80\x81\xE8\xB4\xA7\xE5\x88\xB0\xE4\xBB\x98\xE6\xAC\xBE\xE3\x80\x81\xE9\x85\x8D\xE9\x80\x81\xE5\x8F\x8A\xE6\x97\xB6\xE3\x80\x81\xE6\x94\xBE\xE5\xBF\x83\xE6\x9C\x8D\xE5\x8A\xA1\xE3\x80\x81\xE8\xBD\xBB\xE6\x9D\xBE\xE8\xB4\xAD\xE7\x89\xA9\xEF\xBC\x81^A^A768^A1366^A24^Azh-CN^AMozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0^A4af03b636b4f947d47111ad4c15a31b5^Azx5352
+
+
+我们将上面的消息通过"^A"进行分割，可以得到如下字段：
+
+1483210782.201
+192.168.71.1
+hadoop01
+http://hadoop01:8808/
+\xE6\xB7\x98\xE6\xB7\x98\xE7\xBD\x91\xE4\xB8\x8A\xE5\x95\x86\xE5\x9F\x8E-\xE7\xBB\xBC\xE5\x90\x88\xE7\xBD\x91\xE8\xB4\xAD\xE9\xA6\x96\xE9\x80\x89\xEF\xBC\x88JD.COM\xEF\xBC\x89-\xE6\xAD\xA3\xE5\x93\x81\xE4\xBD\x8E\xE4\xBB\xB7\xE3\x80\x81\xE5\x93\x81\xE8\xB4\xA8\xE4\xBF\x9D\xE9\x9A\x9C\xE3\x80\x81\xE8\xB4\xA7\xE5\x88\xB0\xE4\xBB\x98\xE6\xAC\xBE\xE3\x80\x81\xE9\x85\x8D\xE9\x80\x81\xE5\x8F\x8A\xE6\x97\xB6\xE3\x80\x81\xE6\x94\xBE\xE5\xBF\x83\xE6\x9C\x8D\xE5\x8A\xA1\xE3\x80\x81\xE8\xBD\xBB\xE6\x9D\xBE\xE8\xB4\xAD\xE7\x89\xA9\xEF\xBC\x81
+768
+1366
+24
+zh-CN
+Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0
+4af03b636b4f947d47111ad4c15a31b5
+zx5352
+
+
+========================================================================================================
+
+下面是nginx服务器的详细安装记录：
+
+Last login: Sat Dec 31 06:26:15 2016 from 192.168.71.1
+由于我们要使用本地yum仓库来安装，所有首先看我们的yum源的配置：
+[root@hadoop02 ~]# cd /etc/yum.repos.d/
+[root@hadoop02 yum.repos.d]# ll
+total 24
+-rw-r--r--. 1 root root 1991 Aug  3  2015 CentOS-Base.repo
+-rw-r--r--. 1 root root  647 Aug  3  2015 CentOS-Debuginfo.repo
+-rw-r--r--. 1 root root  289 Aug  3  2015 CentOS-fasttrack.repo
+-rw-r--r--. 1 root root  630 Aug  3  2015 CentOS-Media.repo
+-rw-r--r--. 1 root root 6259 Aug  3  2015 CentOS-Vault.repo
+将所有的".repo"文件都改名，只保留一个"CentOS-Media.repo"文件：
+[root@hadoop02 yum.repos.d]# mv CentOS-Base.repo CentOS-Base.repo.bak
+[root@hadoop02 yum.repos.d]# mv CentOS-Debuginfo.repo CentOS-Debuginfo.repo.bak
+[root@hadoop02 yum.repos.d]# mv CentOS-fasttrack.repo CentOS-fasttrack.repo.bak
+[root@hadoop02 yum.repos.d]# mv CentOS-Vault.repo CentOS-Vault.repo.bak
+[root@hadoop02 yum.repos.d]# ll
+total 24
+-rw-r--r--. 1 root root 1991 Aug  3  2015 CentOS-Base.repo.bak
+-rw-r--r--. 1 root root  647 Aug  3  2015 CentOS-Debuginfo.repo.bak
+-rw-r--r--. 1 root root  289 Aug  3  2015 CentOS-fasttrack.repo.bak
+-rw-r--r--. 1 root root  630 Aug  3  2015 CentOS-Media.repo
+-rw-r--r--. 1 root root 6259 Aug  3  2015 CentOS-Vault.repo.bak
+查看我们的"CentOS-Media.repo"文件的内容：
+[root@hadoop02 yum.repos.d]# vi CentOS-Media.repo 
+[c6-media]
+name=CentOS-$releasever - Media
+baseurl=file:///media/CentOS/
+        file:///media/cdrom/
+        file:///media/cdrecorder/
+gpgcheck=1
+enabled=0
+
+
+用下面的内容替换CentOS-Media.repo文件原有的内容，指定我们的yum仓库位于/mnt/cdrom/下：
+[c6-media]
+name=CentOS-$releasever - Media
+baseurl=file:///mnt/cdrom/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-6
+ 
+~
+~
+~
+~
+"CentOS-Media.repo" 19L, 564C written
+
+在虚拟机上设置我们的iso光盘镜像文件，并勾选"启动时连接"复选框，重启虚拟机。
+
+[root@hadoop02 yum.repos.d]# cd /mnt
+[root@hadoop02 mnt]# ll
+total 0
+
+在/mnt/下面创建cdrom目录：
+[root@hadoop02 mnt]# mkdir cdrom
+[root@hadoop02 mnt]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 31 07:45 cdrom
+[root@hadoop02 mnt]# pwd
+/mnt
+
+将光盘镜像挂载到/mnt/cdrom目录：
+[root@hadoop02 mnt]# mount -t iso9660 -o ro /dev/cdrom /mnt/cdrom
+[root@hadoop02 mnt]# cd cdrom/
+查看/mnt/cdrom目录下是否能看到光盘镜像中的内容，如果能看到，说明挂载成功。
+[root@hadoop02 cdrom]# ll
+total 558
+-r--r--r--. 2 root root     14 Aug  4  2015 CentOS_BuildTag
+dr-xr-xr-x. 3 root root   2048 Aug  4  2015 EFI
+-r--r--r--. 2 root root    212 Nov 27  2013 EULA
+-r--r--r--. 2 root root  18009 Nov 27  2013 GPL
+dr-xr-xr-x. 3 root root   2048 Aug  4  2015 images
+dr-xr-xr-x. 2 root root   2048 Aug  4  2015 isolinux
+dr-xr-xr-x. 2 root root 528384 Aug  4  2015 Packages
+-r--r--r--. 2 root root   1354 Jul 25  2015 RELEASE-NOTES-en-US.html
+dr-xr-xr-x. 2 root root   4096 Aug  4  2015 repodata
+-r--r--r--. 2 root root   1706 Nov 27  2013 RPM-GPG-KEY-CentOS-6
+-r--r--r--. 2 root root   1730 Nov 27  2013 RPM-GPG-KEY-CentOS-Debug-6
+-r--r--r--. 2 root root   1730 Nov 27  2013 RPM-GPG-KEY-CentOS-Security-6
+-r--r--r--. 2 root root   1734 Nov 27  2013 RPM-GPG-KEY-CentOS-Testing-6
+-r--r--r--. 1 root root   3380 Aug  4  2015 TRANS.TBL
+下面我们就随便安装一个"telnet"软件，如果能够安装成功，说明我的本地yum仓库配置好了，下面我们就可以来安装我们的nginx了。
+[root@hadoop02 cdrom]# yum install telnet
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Determining fastest mirrors
+c6-media                                                                                                                                        | 4.0 kB     00:00 ... 
+c6-media/primary_db                                                                                                                             | 4.6 MB     00:00 ... 
+Resolving Dependencies
+--> Running transaction check
+---> Package telnet.x86_64 1:0.17-48.el6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                              Arch                                 Version                                        Repository                              Size
+=======================================================================================================================================================================
+Installing:
+ telnet                               x86_64                               1:0.17-48.el6                                  c6-media                                58 k
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       1 Package(s)
+
+Total download size: 58 k
+Installed size: 109 k
+Is this ok [y/N]: y
+Downloading Packages:
+warning: rpmts_HdrFromFdno: Header V3 RSA/SHA1 Signature, key ID c105b9de: NOKEY
+Retrieving key from file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-6
+Importing GPG key 0xC105B9DE:
+ Userid : CentOS-6 Key (CentOS 6 Official Signing Key) <centos-6-key@centos.org>
+ Package: centos-release-6-7.el6.centos.12.3.x86_64 (@anaconda-CentOS-201508042137.x86_64/6.7)
+ From   : /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-6
+Is this ok [y/N]: y
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+Warning: RPMDB altered outside of yum.
+** Found 3 pre-existing rpmdb problem(s), 'yum check' output follows:
+2:postfix-2.6.6-6.el6_5.x86_64 has missing requires of libmysqlclient.so.16()(64bit)
+2:postfix-2.6.6-6.el6_5.x86_64 has missing requires of libmysqlclient.so.16(libmysqlclient_16)(64bit)
+2:postfix-2.6.6-6.el6_5.x86_64 has missing requires of mysql-libs
+  Installing : 1:telnet-0.17-48.el6.x86_64                                                                                                                         1/1 
+  Verifying  : 1:telnet-0.17-48.el6.x86_64                                                                                                                         1/1 
+
+Installed:
+  telnet.x86_64 1:0.17-48.el6                                                                                                                                          
+
+Complete!
+
+下面我们来使用yum命令来安装一些编译环境，这是后面通过编译安装nginx以及其他软件所需要的一些环境。
+[root@hadoop02 cdrom]# yum -y install gcc perl pcre-devel openssl openssl-devel
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Loading mirror speeds from cached hostfile
+Package gcc-4.4.7-16.el6.x86_64 already installed and latest version
+Package 4:perl-5.10.1-141.el6.x86_64 already installed and latest version
+Package openssl-1.0.1e-42.el6.x86_64 already installed and latest version
+Resolving Dependencies
+--> Running transaction check
+---> Package openssl-devel.x86_64 0:1.0.1e-42.el6 will be installed
+--> Processing Dependency: zlib-devel for package: openssl-devel-1.0.1e-42.el6.x86_64
+--> Processing Dependency: krb5-devel for package: openssl-devel-1.0.1e-42.el6.x86_64
+---> Package pcre-devel.x86_64 0:7.8-7.el6 will be installed
+--> Running transaction check
+---> Package krb5-devel.x86_64 0:1.10.3-42.el6 will be installed
+--> Processing Dependency: libselinux-devel for package: krb5-devel-1.10.3-42.el6.x86_64
+--> Processing Dependency: libcom_err-devel for package: krb5-devel-1.10.3-42.el6.x86_64
+--> Processing Dependency: keyutils-libs-devel for package: krb5-devel-1.10.3-42.el6.x86_64
+---> Package zlib-devel.x86_64 0:1.2.3-29.el6 will be installed
+--> Running transaction check
+---> Package keyutils-libs-devel.x86_64 0:1.4-5.el6 will be installed
+---> Package libcom_err-devel.x86_64 0:1.41.12-22.el6 will be installed
+---> Package libselinux-devel.x86_64 0:2.0.94-5.8.el6 will be installed
+--> Processing Dependency: libsepol-devel >= 2.0.32-1 for package: libselinux-devel-2.0.94-5.8.el6.x86_64
+--> Processing Dependency: pkgconfig(libsepol) for package: libselinux-devel-2.0.94-5.8.el6.x86_64
+--> Running transaction check
+---> Package libsepol-devel.x86_64 0:2.0.41-4.el6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                                        Arch                              Version                                    Repository                           Size
+=======================================================================================================================================================================
+Installing:
+ openssl-devel                                  x86_64                            1.0.1e-42.el6                              c6-media                            1.2 M
+ pcre-devel                                     x86_64                            7.8-7.el6                                  c6-media                            320 k
+Installing for dependencies:
+ keyutils-libs-devel                            x86_64                            1.4-5.el6                                  c6-media                             29 k
+ krb5-devel                                     x86_64                            1.10.3-42.el6                              c6-media                            502 k
+ libcom_err-devel                               x86_64                            1.41.12-22.el6                             c6-media                             33 k
+ libselinux-devel                               x86_64                            2.0.94-5.8.el6                             c6-media                            137 k
+ libsepol-devel                                 x86_64                            2.0.41-4.el6                               c6-media                             64 k
+ zlib-devel                                     x86_64                            1.2.3-29.el6                               c6-media                             44 k
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       8 Package(s)
+
+Total download size: 2.3 M
+Installed size: 5.9 M
+Downloading Packages:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                  6.0 MB/s | 2.3 MB     00:00     
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Installing : zlib-devel-1.2.3-29.el6.x86_64                                                                                                                      1/8 
+  Installing : libcom_err-devel-1.41.12-22.el6.x86_64                                                                                                              2/8 
+  Installing : libsepol-devel-2.0.41-4.el6.x86_64                                                                                                                  3/8 
+  Installing : libselinux-devel-2.0.94-5.8.el6.x86_64                                                                                                              4/8 
+  Installing : keyutils-libs-devel-1.4-5.el6.x86_64                                                                                                                5/8 
+  Installing : krb5-devel-1.10.3-42.el6.x86_64                                                                                                                     6/8 
+  Installing : openssl-devel-1.0.1e-42.el6.x86_64                                                                                                                  7/8 
+  Installing : pcre-devel-7.8-7.el6.x86_64                                                                                                                         8/8 
+  Verifying  : keyutils-libs-devel-1.4-5.el6.x86_64                                                                                                                1/8 
+  Verifying  : libsepol-devel-2.0.41-4.el6.x86_64                                                                                                                  2/8 
+  Verifying  : libcom_err-devel-1.41.12-22.el6.x86_64                                                                                                              3/8 
+  Verifying  : krb5-devel-1.10.3-42.el6.x86_64                                                                                                                     4/8 
+  Verifying  : openssl-devel-1.0.1e-42.el6.x86_64                                                                                                                  5/8 
+  Verifying  : libselinux-devel-2.0.94-5.8.el6.x86_64                                                                                                              6/8 
+  Verifying  : zlib-devel-1.2.3-29.el6.x86_64                                                                                                                      7/8 
+  Verifying  : pcre-devel-7.8-7.el6.x86_64                                                                                                                         8/8 
+
+Installed:
+  openssl-devel.x86_64 0:1.0.1e-42.el6                                                  pcre-devel.x86_64 0:7.8-7.el6                                                 
+
+Dependency Installed:
+  keyutils-libs-devel.x86_64 0:1.4-5.el6   krb5-devel.x86_64 0:1.10.3-42.el6   libcom_err-devel.x86_64 0:1.41.12-22.el6   libselinux-devel.x86_64 0:2.0.94-5.8.el6  
+  libsepol-devel.x86_64 0:2.0.41-4.el6     zlib-devel.x86_64 0:1.2.3-29.el6   
+
+Complete!
+
+我们把准备好的一些和nginx相关的软件都放在了/root/apps/elk/soft/目录下面：
+[root@hadoop02 cdrom]# cd /root/apps/elk/
+[root@hadoop02 elk]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 31 07:38 soft
+[root@hadoop02 elk]# cd soft/
+[root@hadoop02 soft]# ll
+total 5912
+-rw-r--r--. 1 root root   64779 Dec 31 07:36 echo-nginx-module-0.58.tar.gz
+-rw-r--r--. 1 root root  847615 Dec 31 07:36 LuaJIT-2.0.4.tar.gz
+-rw-r--r--. 1 root root  569372 Dec 31 07:36 lua-nginx-module-0.10.0.tar.gz
+-rw-r--r--. 1 root root  833473 Dec 31 07:36 nginx-1.8.1.tar.gz
+-rw-r--r--. 1 root root    2450 Dec 31 07:36 nginx.conf
+-rw-r--r--. 1 root root   65029 Dec 31 07:36 ngx_devel_kit-0.2.19.tar.gz
+-rw-r--r--. 1 root root 3616491 Dec 31 07:36 openresty-1.9.7.3.tar.gz
+-rw-r--r--. 1 root root   35495 Dec 31 07:36 set-misc-nginx-module-0.29.tar.gz
+-rw-r--r--. 1 root root    7107 Dec 31 07:36 网站统计.txt
+[root@hadoop02 soft]# 
+[root@hadoop02 soft]# 
+[root@hadoop02 soft]# 
+
+开始解压"LuaJIT-2.0.4.tar.gz"安装包：
+[root@hadoop02 soft]# tar -zxvf LuaJIT-2.0.4.tar.gz -C /usr/local/src/
+解压的过程省略。解压完成后，进入到解压后的"LuaJIT-2.0.4"目录：
+[root@hadoop02 soft]# cd /usr/local/src/LuaJIT-2.0.4/
+
+编译"LuaJIT-2.0.4"并将其安装到"/usr/local/luajit"目录下：
+[root@hadoop02 LuaJIT-2.0.4]# make && make install PREFIX=/usr/local/luajit
+==== Building LuaJIT 2.0.4 ====
+make -C src
+make[1]: Entering directory `/usr/local/src/LuaJIT-2.0.4/src'
+HOSTCC    host/minilua.o
+HOSTLINK  host/minilua
+DYNASM    host/buildvm_arch.h
+HOSTCC    host/buildvm.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/buildvm
+.....................
+.....................
+.....................
+CC        lib_init.o
+AR        libluajit.a
+CC        luajit.o
+BUILDVM   jit/vmdef.lua
+DYNLINK   libluajit.so
+LINK      luajit
+OK        Successfully built LuaJIT
+make[1]: Leaving directory `/usr/local/src/LuaJIT-2.0.4/src'
+==== Successfully built LuaJIT 2.0.4 ====
+==== Installing LuaJIT 2.0.4 to /usr/local/luajit ====
+mkdir -p /usr/local/luajit/bin /usr/local/luajit/lib /usr/local/luajit/include/luajit-2.0 /usr/local/luajit/share/man/man1 /usr/local/luajit/lib/pkgconfig /usr/local/luajit/share/luajit-2.0.4/jit /usr/local/luajit/share/lua/5.1 /usr/local/luajit/lib/lua/5.1
+cd src && install -m 0755 luajit /usr/local/luajit/bin/luajit-2.0.4
+cd src && test -f libluajit.a && install -m 0644 libluajit.a /usr/local/luajit/lib/libluajit-5.1.a || :
+rm -f /usr/local/luajit/bin/luajit /usr/local/luajit/lib/libluajit-5.1.so.2.0.4 /usr/local/luajit/lib/libluajit-5.1.so /usr/local/luajit/lib/libluajit-5.1.so
+cd src && test -f libluajit.so && \
+          install -m 0755 libluajit.so /usr/local/luajit/lib/libluajit-5.1.so.2.0.4 && \
+          ldconfig -n /usr/local/luajit/lib && \
+          ln -sf libluajit-5.1.so.2.0.4 /usr/local/luajit/lib/libluajit-5.1.so && \
+          ln -sf libluajit-5.1.so.2.0.4 /usr/local/luajit/lib/libluajit-5.1.so || :
+cd etc && install -m 0644 luajit.1 /usr/local/luajit/share/man/man1
+cd etc && sed -e "s|^prefix=.*|prefix=/usr/local/luajit|" -e "s|^multilib=.*|multilib=lib|" luajit.pc > luajit.pc.tmp && \
+          install -m 0644 luajit.pc.tmp /usr/local/luajit/lib/pkgconfig/luajit.pc && \
+          rm -f luajit.pc.tmp
+cd src && install -m 0644 lua.h lualib.h lauxlib.h luaconf.h lua.hpp luajit.h /usr/local/luajit/include/luajit-2.0
+cd src/jit && install -m 0644 bc.lua v.lua dump.lua dis_x86.lua dis_x64.lua dis_arm.lua dis_ppc.lua dis_mips.lua dis_mipsel.lua bcsave.lua vmdef.lua /usr/local/luajit/share/luajit-2.0.4/jit
+ln -sf luajit-2.0.4 /usr/local/luajit/bin/luajit
+==== Successfully installed LuaJIT 2.0.4 to /usr/local/luajit ====
+[root@hadoop02 LuaJIT-2.0.4]# 
+[root@hadoop02 local]# cd /root/apps/elk/soft/
+[root@hadoop02 soft]# ll
+total 5912
+-rw-r--r--. 1 root root   64779 Dec 31 07:36 echo-nginx-module-0.58.tar.gz
+-rw-r--r--. 1 root root  847615 Dec 31 07:36 LuaJIT-2.0.4.tar.gz
+-rw-r--r--. 1 root root  569372 Dec 31 07:36 lua-nginx-module-0.10.0.tar.gz
+-rw-r--r--. 1 root root  833473 Dec 31 07:36 nginx-1.8.1.tar.gz
+-rw-r--r--. 1 root root    2450 Dec 31 07:36 nginx.conf
+-rw-r--r--. 1 root root   65029 Dec 31 07:36 ngx_devel_kit-0.2.19.tar.gz
+-rw-r--r--. 1 root root 3616491 Dec 31 07:36 openresty-1.9.7.3.tar.gz
+-rw-r--r--. 1 root root   35495 Dec 31 07:36 set-misc-nginx-module-0.29.tar.gz
+-rw-r--r--. 1 root root    7107 Dec 31 07:36 网站统计.txt
+[root@hadoop02 soft]#
+
+将"lua-nginx-module-0.10.0.tar.gz"解压到"/usr/local/nginx/modules/"目录下:
+[root@hadoop02 soft]# tar -zxvf lua-nginx-module-0.10.0.tar.gz -C /usr/local/nginx/modules/
+....................
+....................
+[root@hadoop02 soft]# tar -zxvf set-misc-nginx-module-0.29.tar.gz -C /usr/local/nginx/modules/
+....................
+....................
+[root@hadoop02 soft]# tar -zxvf ngx_devel_kit-0.2.19.tar.gz -C /usr/local/nginx/modules/
+....................
+....................
+[root@hadoop02 soft]# tar -zxvf echo-nginx-module-0.58.tar.gz -C /usr/local/nginx/modules/
+....................
+....................
+[root@hadoop02 soft]# tar -zxvf openresty-1.9.7.3.tar.gz -C /usr/local/src/
+
+[root@hadoop02 soft]# cd /usr/local/src/openresty-1.9.7.3/
+
+将"openresty-1.9.7.3"编译安装到"/usr/local/openresty"目录下：
+[root@hadoop02 openresty-1.9.7.3]# ./configure --prefix=/usr/local/openresty --with-luajit && make && make install
+................................
+................................
+make[1]: Entering directory `/usr/local/src/openresty-1.9.7.3/build/lua-resty-core-0.1.4'
+/usr/local/src/openresty-1.9.7.3/build/install -d /usr/local/openresty/lualib/resty/core/
+/usr/local/src/openresty-1.9.7.3/build/install -d /usr/local/openresty/lualib/ngx/
+/usr/local/src/openresty-1.9.7.3/build/install lib/resty/*.lua /usr/local/openresty/lualib/resty/
+/usr/local/src/openresty-1.9.7.3/build/install lib/resty/core/*.lua /usr/local/openresty/lualib/resty/core/
+/usr/local/src/openresty-1.9.7.3/build/install lib/ngx/*.lua /usr/local/openresty/lualib/ngx/
+make[1]: Leaving directory `/usr/local/src/openresty-1.9.7.3/build/lua-resty-core-0.1.4'
+cd /usr/local/src/openresty-1.9.7.3/build/lua-resty-upstream-healthcheck-0.03 && make install DESTDIR= LUA_LIB_DIR=/usr/local/openresty/lualib INSTALL=/usr/local/src/openresty-1.9.7.3/build/install
+make[1]: Entering directory `/usr/local/src/openresty-1.9.7.3/build/lua-resty-upstream-healthcheck-0.03'
+/usr/local/src/openresty-1.9.7.3/build/install -d /usr/local/openresty/lualib/resty/upstream/
+/usr/local/src/openresty-1.9.7.3/build/install lib/resty/upstream/*.lua /usr/local/openresty/lualib/resty/upstream/
+make[1]: Leaving directory `/usr/local/src/openresty-1.9.7.3/build/lua-resty-upstream-healthcheck-0.03'
+cd /usr/local/src/openresty-1.9.7.3/build/resty-cli-0.05 && /usr/local/src/openresty-1.9.7.3/build/install resty /usr/local/openresty/bin/
+cd /usr/local/src/openresty-1.9.7.3/build/nginx-1.9.7 && make install DESTDIR=
+make[1]: Entering directory `/usr/local/src/openresty-1.9.7.3/build/nginx-1.9.7'
+make -f objs/Makefile install
+make[2]: Entering directory `/usr/local/src/openresty-1.9.7.3/build/nginx-1.9.7'
+test -d '/usr/local/openresty/nginx' || mkdir -p '/usr/local/openresty/nginx'
+test -d '/usr/local/openresty/nginx/sbin'               || mkdir -p '/usr/local/openresty/nginx/sbin'
+test ! -f '/usr/local/openresty/nginx/sbin/nginx'               || mv '/usr/local/openresty/nginx/sbin/nginx'                   '/usr/local/openresty/nginx/sbin/nginx.old'
+cp objs/nginx '/usr/local/openresty/nginx/sbin/nginx'
+test -d '/usr/local/openresty/nginx/conf'               || mkdir -p '/usr/local/openresty/nginx/conf'
+cp conf/koi-win '/usr/local/openresty/nginx/conf'
+cp conf/koi-utf '/usr/local/openresty/nginx/conf'
+cp conf/win-utf '/usr/local/openresty/nginx/conf'
+test -f '/usr/local/openresty/nginx/conf/mime.types'            || cp conf/mime.types '/usr/local/openresty/nginx/conf'
+cp conf/mime.types '/usr/local/openresty/nginx/conf/mime.types.default'
+test -f '/usr/local/openresty/nginx/conf/fastcgi_params'                || cp conf/fastcgi_params '/usr/local/openresty/nginx/conf'
+cp conf/fastcgi_params          '/usr/local/openresty/nginx/conf/fastcgi_params.default'
+test -f '/usr/local/openresty/nginx/conf/fastcgi.conf'          || cp conf/fastcgi.conf '/usr/local/openresty/nginx/conf'
+cp conf/fastcgi.conf '/usr/local/openresty/nginx/conf/fastcgi.conf.default'
+test -f '/usr/local/openresty/nginx/conf/uwsgi_params'          || cp conf/uwsgi_params '/usr/local/openresty/nginx/conf'
+cp conf/uwsgi_params            '/usr/local/openresty/nginx/conf/uwsgi_params.default'
+test -f '/usr/local/openresty/nginx/conf/scgi_params'           || cp conf/scgi_params '/usr/local/openresty/nginx/conf'
+cp conf/scgi_params             '/usr/local/openresty/nginx/conf/scgi_params.default'
+test -f '/usr/local/openresty/nginx/conf/nginx.conf'            || cp conf/nginx.conf '/usr/local/openresty/nginx/conf/nginx.conf'
+cp conf/nginx.conf '/usr/local/openresty/nginx/conf/nginx.conf.default'
+test -d '/usr/local/openresty/nginx/logs'               || mkdir -p '/usr/local/openresty/nginx/logs'
+test -d '/usr/local/openresty/nginx/logs' ||            mkdir -p '/usr/local/openresty/nginx/logs'
+test -d '/usr/local/openresty/nginx/html'               || cp -R docs/html '/usr/local/openresty/nginx'
+test -d '/usr/local/openresty/nginx/logs' ||            mkdir -p '/usr/local/openresty/nginx/logs'
+make[2]: Leaving directory `/usr/local/src/openresty-1.9.7.3/build/nginx-1.9.7'
+make[1]: Leaving directory `/usr/local/src/openresty-1.9.7.3/build/nginx-1.9.7'
+[root@hadoop02 openresty-1.9.7.3]# 
+[root@hadoop02 local]# cd /root/apps/elk/soft/
+[root@hadoop02 soft]# ll
+total 5912
+-rw-r--r--. 1 root root   64779 Dec 31 07:36 echo-nginx-module-0.58.tar.gz
+-rw-r--r--. 1 root root  847615 Dec 31 07:36 LuaJIT-2.0.4.tar.gz
+-rw-r--r--. 1 root root  569372 Dec 31 07:36 lua-nginx-module-0.10.0.tar.gz
+-rw-r--r--. 1 root root  833473 Dec 31 07:36 nginx-1.8.1.tar.gz
+-rw-r--r--. 1 root root    2450 Dec 31 07:36 nginx.conf
+-rw-r--r--. 1 root root   65029 Dec 31 07:36 ngx_devel_kit-0.2.19.tar.gz
+-rw-r--r--. 1 root root 3616491 Dec 31 07:36 openresty-1.9.7.3.tar.gz
+-rw-r--r--. 1 root root   35495 Dec 31 07:36 set-misc-nginx-module-0.29.tar.gz
+-rw-r--r--. 1 root root    7107 Dec 31 07:36 网站统计.txt
+[root@hadoop02 soft]# 
+[root@hadoop02 soft]# tar -zxvf nginx-1.8.1.tar.gz -C /usr/local/src/
+....................
+....................
+[root@hadoop02 soft]# cd /usr/local/src/nginx-1.8.1/
+将解压后的"nginx-1.8.1"源码编译到"/usr/local/nginx"目录下：
+[root@hadoop02 nginx-1.8.1]#./configure --prefix=/usr/local/nginx \
+	--with-ld-opt="-Wl,-rpath,/usr/local/luajit/lib" \
+    --add-module=/usr/local/nginx/modules/ngx_devel_kit-0.2.19 \
+    --add-module=/usr/local/nginx/modules/lua-nginx-module-0.10.0 \
+    --add-module=/usr/local/nginx/modules/set-misc-nginx-module-0.29 \
+    --add-module=/usr/local/nginx/modules/echo-nginx-module-0.58 
+make -j2
+make install
+
+执行上面的这一大段命令后，会输入很多的日志信息，以下只截取部分日志信息：
+................................
+................................
+................................
+        objs/addon/src/ngx_http_echo_var.o \
+        objs/addon/src/ngx_http_echo_handler.o \
+        objs/addon/src/ngx_http_echo_filter.o \
+        objs/addon/src/ngx_http_echo_sleep.o \
+        objs/addon/src/ngx_http_echo_location.o \
+        objs/addon/src/ngx_http_echo_echo.o \
+        objs/addon/src/ngx_http_echo_request_info.o \
+        objs/addon/src/ngx_http_echo_subrequest.o \
+        objs/addon/src/ngx_http_echo_foreach.o \
+        objs/ngx_modules.o \
+        -L/usr/local/luajit/lib -Wl,-rpath,/usr/local/luajit/lib -Wl,-E -lpthread -lcrypt -L/usr/local/luajit/lib -lluajit-5.1 -lm -ldl -lpcre -lcrypto -lcrypto -lz
+make[1]: Leaving directory `/usr/local/src/nginx-1.8.1'
+make -f objs/Makefile manpage
+make[1]: Entering directory `/usr/local/src/nginx-1.8.1'
+sed -e "s|%%PREFIX%%|/usr/local/nginx|" \
+                -e "s|%%PID_PATH%%|/usr/local/nginx/logs/nginx.pid|" \
+                -e "s|%%CONF_PATH%%|/usr/local/nginx/conf/nginx.conf|" \
+                -e "s|%%ERROR_LOG_PATH%%|/usr/local/nginx/logs/error.log|" \
+                < man/nginx.8 > objs/nginx.8
+make[1]: Leaving directory `/usr/local/src/nginx-1.8.1'
+
+开始使用"make install"命令来安装nginx：
+[root@hadoop02 nginx-1.8.1]# make install
+make -f objs/Makefile install
+make[1]: Entering directory `/usr/local/src/nginx-1.8.1'
+test -d '/usr/local/nginx' || mkdir -p '/usr/local/nginx'
+test -d '/usr/local/nginx/sbin'                 || mkdir -p '/usr/local/nginx/sbin'
+test ! -f '/usr/local/nginx/sbin/nginx'                 || mv '/usr/local/nginx/sbin/nginx'                     '/usr/local/nginx/sbin/nginx.old'
+cp objs/nginx '/usr/local/nginx/sbin/nginx'
+test -d '/usr/local/nginx/conf'                 || mkdir -p '/usr/local/nginx/conf'
+cp conf/koi-win '/usr/local/nginx/conf'
+cp conf/koi-utf '/usr/local/nginx/conf'
+cp conf/win-utf '/usr/local/nginx/conf'
+test -f '/usr/local/nginx/conf/mime.types'              || cp conf/mime.types '/usr/local/nginx/conf'
+cp conf/mime.types '/usr/local/nginx/conf/mime.types.default'
+test -f '/usr/local/nginx/conf/fastcgi_params'          || cp conf/fastcgi_params '/usr/local/nginx/conf'
+cp conf/fastcgi_params          '/usr/local/nginx/conf/fastcgi_params.default'
+test -f '/usr/local/nginx/conf/fastcgi.conf'            || cp conf/fastcgi.conf '/usr/local/nginx/conf'
+cp conf/fastcgi.conf '/usr/local/nginx/conf/fastcgi.conf.default'
+test -f '/usr/local/nginx/conf/uwsgi_params'            || cp conf/uwsgi_params '/usr/local/nginx/conf'
+cp conf/uwsgi_params            '/usr/local/nginx/conf/uwsgi_params.default'
+test -f '/usr/local/nginx/conf/scgi_params'             || cp conf/scgi_params '/usr/local/nginx/conf'
+cp conf/scgi_params             '/usr/local/nginx/conf/scgi_params.default'
+test -f '/usr/local/nginx/conf/nginx.conf'              || cp conf/nginx.conf '/usr/local/nginx/conf/nginx.conf'
+cp conf/nginx.conf '/usr/local/nginx/conf/nginx.conf.default'
+test -d '/usr/local/nginx/logs'                 || mkdir -p '/usr/local/nginx/logs'
+test -d '/usr/local/nginx/logs' ||              mkdir -p '/usr/local/nginx/logs'
+test -d '/usr/local/nginx/html'                 || cp -R html '/usr/local/nginx'
+test -d '/usr/local/nginx/logs' ||              mkdir -p '/usr/local/nginx/logs'
+make[1]: Leaving directory `/usr/local/src/nginx-1.8.1'
+
+我们的nginx终于安装成功了，下面我们进入到nginx的安装目录"/usr/local/nginx/"下面：
+[root@hadoop02 nginx-1.8.1]# 
+[root@hadoop02 nginx-1.8.1]# cd /usr/local/nginx/
+[root@hadoop02 nginx]# ll
+total 20
+drwxr-xr-x. 2 root root 4096 Dec 31 08:02 conf
+drwxr-xr-x. 2 root root 4096 Dec 31 08:02 html
+drwxr-xr-x. 2 root root 4096 Dec 31 08:02 logs
+drwxr-xr-x. 6 root root 4096 Dec 31 07:54 modules
+drwxr-xr-x. 2 root root 4096 Dec 31 08:02 sbin
+[root@hadoop02 nginx]# cd conf/
+[root@hadoop02 conf]# ll
+total 60
+-rw-r--r--. 1 root root 1034 Dec 31 08:02 fastcgi.conf
+-rw-r--r--. 1 root root 1034 Dec 31 08:02 fastcgi.conf.default
+-rw-r--r--. 1 root root  964 Dec 31 08:02 fastcgi_params
+-rw-r--r--. 1 root root  964 Dec 31 08:02 fastcgi_params.default
+-rw-r--r--. 1 root root 2837 Dec 31 08:02 koi-utf
+-rw-r--r--. 1 root root 2223 Dec 31 08:02 koi-win
+-rw-r--r--. 1 root root 3957 Dec 31 08:02 mime.types
+-rw-r--r--. 1 root root 3957 Dec 31 08:02 mime.types.default
+-rw-r--r--. 1 root root 2656 Dec 31 08:02 nginx.conf
+-rw-r--r--. 1 root root 2656 Dec 31 08:02 nginx.conf.default
+-rw-r--r--. 1 root root  596 Dec 31 08:02 scgi_params
+-rw-r--r--. 1 root root  596 Dec 31 08:02 scgi_params.default
+-rw-r--r--. 1 root root  623 Dec 31 08:02 uwsgi_params
+-rw-r--r--. 1 root root  623 Dec 31 08:02 uwsgi_params.default
+-rw-r--r--. 1 root root 3610 Dec 31 08:02 win-utf
+[root@hadoop02 conf]# cp nginx.conf nginx.conf.bak
+[root@hadoop02 conf]# vi nginx.conf
+下面我们就可以来编辑nginx的配置文件了，配置文件的具体内容请回到本文的开始部分查看。
+

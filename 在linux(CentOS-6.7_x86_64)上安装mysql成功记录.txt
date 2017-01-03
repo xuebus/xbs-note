@@ -1,0 +1,513 @@
+
+查看linux服务器的yum源设置：
+[root@hadoop03 yum.repos.d]# cd /etc/yum.repos.d
+[root@hadoop03 yum.repos.d]# ll
+total 4
+-rw-r--r--. 1 root root 564 Dec 27 11:27 CentOS-Media.repo
+[root@hadoop03 yum.repos.d]# vi CentOS-Media.repo
+# CentOS-Media.repo
+#
+#  This repo can be used with mounted DVD media, verify the mount point for
+#  CentOS-6.  You can use this repo and yum to install items directly off the
+#  DVD ISO that we release.
+#
+# To use this repo, put in your DVD and use it with the other repos too:
+#  yum --enablerepo=c6-media [command]
+#
+# or for ONLY the media repo, do this:
+#
+#  yum --disablerepo=\* --enablerepo=c6-media [command]
+
+[c6-media]
+name=CentOS-$releasever - Media
+baseurl=file:///mnt/cdrom/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-6
+~
+~
+"CentOS-Media.repo" 19L, 564C written
+[root@hadoop03 yum.repos.d]# 
+
+我们这里的yum源url设置是file:///mnt/cdrom/，所以需要提前将光盘挂载到/mnt/cdrom/目录（如果没有cdrom目录就创建该目录），其中挂载的命令是：
+mount -t iso9660 -o ro /dev/cdrom /mnt/cdrom
+注意，每次重启linux服务器都要使用以上命令将光盘（CentOS-6.7-x86_64-bin-DVD1.iso和CentOS-6.7-x86_64-bin-DVD2.iso，
+只要将前一个iso挂载即可）挂载到/mnt/cdrom目录，否则yum命令无法使用。
+然后可以使用yum list命令来查看一下光盘是否挂载成功：
+
+[root@hadoop03 yum.repos.d]# rpm -qa | grep mysql
+mysql-community-release-el6-5.noarch
+[root@hadoop03 yum.repos.d]# yum list | grep mysql
+mysql-community-release.noarch           el6-5                          @/mysql-community-release-el6-5.noarch
+apr-util-mysql.x86_64                    1.3.9-3.el6_0.1                c6-media
+bacula-director-mysql.x86_64             5.0.0-13.el6                   c6-media
+bacula-storage-mysql.x86_64              5.0.0-13.el6                   c6-media
+dovecot-mysql.x86_64                     1:2.0.9-19.el6                 c6-media
+freeradius-mysql.x86_64                  2.2.6-4.el6                    c6-media
+libdbi-dbd-mysql.x86_64                  0.8.3-5.1.el6                  c6-media
+mod_auth_mysql.x86_64                    1:3.0.0-11.el6_0.1             c6-media
+mysql.x86_64                             5.1.73-5.el6_6                 c6-media
+mysql-bench.x86_64                       5.1.73-5.el6_6                 c6-media
+mysql-connector-java.noarch              1:5.1.17-6.el6                 c6-media
+mysql-connector-odbc.x86_64              5.1.5r1144-7.el6               c6-media
+mysql-devel.i686                         5.1.73-5.el6_6                 c6-media
+mysql-devel.x86_64                       5.1.73-5.el6_6                 c6-media
+mysql-embedded.i686                      5.1.73-5.el6_6                 c6-media
+mysql-embedded.x86_64                    5.1.73-5.el6_6                 c6-media
+mysql-embedded-devel.i686                5.1.73-5.el6_6                 c6-media
+mysql-embedded-devel.x86_64              5.1.73-5.el6_6                 c6-media
+mysql-libs.i686                          5.1.73-5.el6_6                 c6-media
+mysql-libs.x86_64                        5.1.73-5.el6_6                 c6-media
+mysql-server.x86_64                      5.1.73-5.el6_6                 c6-media
+mysql-test.x86_64                        5.1.73-5.el6_6                 c6-media
+php-mysql.x86_64                         5.3.3-40.el6_6                 c6-media
+qt-mysql.i686                            1:4.6.2-28.el6_5               c6-media
+qt-mysql.x86_64                          1:4.6.2-28.el6_5               c6-media
+rsyslog-mysql.x86_64                     5.8.10-10.el6_6                c6-media
+rsyslog7-mysql.x86_64                    7.4.10-3.el6_6                 c6-media
+[root@hadoop03 yum.repos.d]# yum install -y mysql-server mysql mysql-deve
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Loading mirror speeds from cached hostfile
+No package mysql-deve available.
+Resolving Dependencies
+--> Running transaction check
+---> Package mysql.x86_64 0:5.1.73-5.el6_6 will be installed
+--> Processing Dependency: mysql-libs = 5.1.73-5.el6_6 for package: mysql-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: libmysqlclient_r.so.16(libmysqlclient_16)(64bit) for package: mysql-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: libmysqlclient.so.16(libmysqlclient_16)(64bit) for package: mysql-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: libmysqlclient_r.so.16()(64bit) for package: mysql-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: libmysqlclient.so.16()(64bit) for package: mysql-5.1.73-5.el6_6.x86_64
+---> Package mysql-server.x86_64 0:5.1.73-5.el6_6 will be installed
+--> Processing Dependency: perl-DBI for package: mysql-server-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: perl-DBD-MySQL for package: mysql-server-5.1.73-5.el6_6.x86_64
+--> Processing Dependency: perl(DBI) for package: mysql-server-5.1.73-5.el6_6.x86_64
+--> Running transaction check
+---> Package mysql-libs.x86_64 0:5.1.73-5.el6_6 will be installed
+---> Package perl-DBD-MySQL.x86_64 0:4.013-3.el6 will be installed
+---> Package perl-DBI.x86_64 0:1.609-4.el6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                                    Arch                               Version                                      Repository                            Size
+=======================================================================================================================================================================
+Installing:
+ mysql                                      x86_64                             5.1.73-5.el6_6                               c6-media                             894 k
+ mysql-server                               x86_64                             5.1.73-5.el6_6                               c6-media                             8.6 M
+Installing for dependencies:
+ mysql-libs                                 x86_64                             5.1.73-5.el6_6                               c6-media                             1.2 M
+ perl-DBD-MySQL                             x86_64                             4.013-3.el6                                  c6-media                             134 k
+ perl-DBI                                   x86_64                             1.609-4.el6                                  c6-media                             705 k
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       5 Package(s)
+
+Total download size: 12 M
+Installed size: 33 M
+Downloading Packages:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                   46 MB/s |  12 MB     00:00     
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Installing : mysql-libs-5.1.73-5.el6_6.x86_64                                                                                                                    1/5 
+  Installing : perl-DBI-1.609-4.el6.x86_64                                                                                                                         2/5 
+  Installing : perl-DBD-MySQL-4.013-3.el6.x86_64                                                                                                                   3/5 
+  Installing : mysql-5.1.73-5.el6_6.x86_64                                                                                                                         4/5 
+  Installing : mysql-server-5.1.73-5.el6_6.x86_64                                                                                                                  5/5 
+  Verifying  : mysql-libs-5.1.73-5.el6_6.x86_64                                                                                                                    1/5 
+  Verifying  : perl-DBD-MySQL-4.013-3.el6.x86_64                                                                                                                   2/5 
+  Verifying  : mysql-5.1.73-5.el6_6.x86_64                                                                                                                         3/5 
+  Verifying  : mysql-server-5.1.73-5.el6_6.x86_64                                                                                                                  4/5 
+  Verifying  : perl-DBI-1.609-4.el6.x86_64                                                                                                                         5/5 
+
+Installed:
+  mysql.x86_64 0:5.1.73-5.el6_6                                                  mysql-server.x86_64 0:5.1.73-5.el6_6                                                 
+
+Dependency Installed:
+  mysql-libs.x86_64 0:5.1.73-5.el6_6                      perl-DBD-MySQL.x86_64 0:4.013-3.el6                      perl-DBI.x86_64 0:1.609-4.el6                     
+
+Complete!
+[root@hadoop03 yum.repos.d]# rpm -qi mysql-server
+Name        : mysql-server                 Relocations: (not relocatable)
+Version     : 5.1.73                            Vendor: CentOS
+Release     : 5.el6_6                       Build Date: Mon 22 Jun 2015 06:08:32 AM PDT
+Install Date: Tue 27 Dec 2016 02:12:44 PM PST      Build Host: c6b9.bsys.dev.centos.org
+Group       : Applications/Databases        Source RPM: mysql-5.1.73-5.el6_6.src.rpm
+Size        : 25882979                         License: GPLv2 with exceptions
+Signature   : RSA/SHA1, Mon 22 Jun 2015 07:30:08 AM PDT, Key ID 0946fca2c105b9de
+Packager    : CentOS BuildSystem <http://bugs.centos.org>
+URL         : http://www.mysql.com
+Summary     : The MySQL server and related files
+Description :
+MySQL is a multi-user, multi-threaded SQL database server. MySQL is a
+client/server implementation consisting of a server daemon (mysqld)
+and many different client programs and libraries. This package contains
+the MySQL server and some accompanying files and directories.
+[root@hadoop03 yum.repos.d]# Name        : mysql-server                 Relocations: (not relocatable)
+-bash: syntax error near unexpected token `('
+[root@hadoop03 yum.repos.d]# Version     : 5.1.73                            Vendor: CentOS
+Release     : 5.el6_6                       Build Date: Mon 22 Jun 2015 06:08:32 AM PDT
+Install Date: Tue 27 Dec 2016 02:12:44 PM PST      Build Host: c6b9.bsys.dev.centos.org
+Group       : Applications/Databases        Source RPM: mysql-5.1.73-5.el6_6.src.rpm
+Size        : 25882979                         License: GPLv2 with exceptions
+Signature   : RSA/SHA1, Mon 22 Jun 2015 07:30:08 AM PDT, Key ID 0946fca2c105b9de
+Packager    : CentOS BuildSystem <http://bugs.centos.org>
+URL         : http://www.mysql.com
+Summary     : The MySQL server and related files
+Description :
+-bash: Version: command not found
+[root@hadoop03 yum.repos.d]# Release     : 5.el6_6                       Build Date: Mon 22 Jun 2015 06:08:32 AM PDT
+-bash: Release: command not found
+[root@hadoop03 yum.repos.d]# Install Date: Tue 27 Dec 2016 02:12:44 PM PST      Build Host: c6b9.bsys.dev.centos.org
+MySQL is a multi-user, multi-threaded SQL database server. MySQL is a
+-bash: Install: command not found
+[root@hadoop03 yum.repos.d]# Group       : Applications/Databases        Source RPM: mysql-5.1.73-5.el6_6.src.rpm
+-bash: Group: command not found
+[root@hadoop03 yum.repos.d]# Size        : 25882979                         License: GPLv2 with exceptions
+-bash: Size: command not found
+[root@hadoop03 yum.repos.d]# Signature   : RSA/SHA1, Mon 22 Jun 2015 07:30:08 AM PDT, Key ID 0946fca2c105b9de
+-bash: Signature: command not found
+[root@hadoop03 yum.repos.d]# Packager    : CentOS BuildSystem <http://bugs.centos.org>
+-bash: syntax error near unexpected token `newline'
+[root@hadoop03 yum.repos.d]# URL         : http://www.mysql.com
+-bash: URL: command not found
+[root@hadoop03 yum.repos.d]# Summary     : The MySQL server and related files
+-bash: Summary: command not found
+[root@hadoop03 yum.repos.d]# Description :
+-bash: Description: command not found
+[root@hadoop03 yum.repos.d]# MySQL is a multi-user, multi-threaded SQL database server. MySQL is a
+-bash: MySQL: command not found
+[root@hadoop03 yum.repos.d]# client/server implementation consisting of a server daemon (mysqld)
+-bash: syntax error near unexpected token `('
+[root@hadoop03 yum.repos.d]# and many different client programs and libraries. This package contains
+-bash: and: command not found
+[root@hadoop03 yum.repos.d]#  service mysqld start
+Initializing MySQL database:  Installing MySQL system tables...
+OK
+Filling help tables...
+OK
+
+To start mysqld at boot time you have to copy
+support-files/mysql.server to the right place for your system
+
+PLEASE REMEMBER TO SET A PASSWORD FOR THE MySQL root USER !
+To do so, start the server, then issue the following commands:
+
+/usr/bin/mysqladmin -u root password 'new-password'
+/usr/bin/mysqladmin -u root -h hadoop03 password 'new-password'
+
+Alternatively you can run:
+/usr/bin/mysql_secure_installation
+
+which will also give you the option of removing the test
+databases and anonymous user created by default.  This is
+strongly recommended for production servers.
+
+See the manual for more instructions.
+
+You can start the MySQL daemon with:
+cd /usr ; /usr/bin/mysqld_safe &
+
+You can test the MySQL daemon with mysql-test-run.pl
+cd /usr/mysql-test ; perl mysql-test-run.pl
+
+Please report any problems with the /usr/bin/mysqlbug script!
+
+[  OK  ]
+Starting mysqld:  [  OK  ]
+[root@hadoop03 yum.repos.d]# service mysqld restart
+Stopping mysqld:  [  OK  ]
+Starting mysqld:  [  OK  ]
+[root@hadoop03 yum.repos.d]#  chkconfig --list | grep mysqld
+mysqld          0:off   1:off   2:off   3:off   4:off   5:off   6:off
+[root@hadoop03 yum.repos.d]# chkconfig mysqld on
+[root@hadoop03 yum.repos.d]# chkconfig --list | grep mysql
+mysqld          0:off   1:off   2:on    3:on    4:on    5:on    6:off
+[root@hadoop03 yum.repos.d]# /usr/bin/mysqladmin -u root password 'root'
+[root@hadoop03 yum.repos.d]# mysql -u root -p
+Enter password: 
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 3
+Server version: 5.1.73 Source distribution
+
+Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| test               |
++--------------------+
+3 rows in set (0.00 sec)
+
+mysql> use test
+Database changed
+mysql> show tables;
+Empty set (0.00 sec)
+
+mysql> use mysql;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> show tables;
++---------------------------+
+| Tables_in_mysql           |
++---------------------------+
+| columns_priv              |
+| db                        |
+| event                     |
+| func                      |
+| general_log               |
+| help_category             |
+| help_keyword              |
+| help_relation             |
+| help_topic                |
+| host                      |
+| ndb_binlog_index          |
+| plugin                    |
+| proc                      |
+| procs_priv                |
+| servers                   |
+| slow_log                  |
+| tables_priv               |
+| time_zone                 |
+| time_zone_leap_second     |
+| time_zone_name            |
+| time_zone_transition      |
+| time_zone_transition_type |
+| user                      |
++---------------------------+
+23 rows in set (0.00 sec)
+
+mysql> Ctrl-C -- exit!
+Aborted
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# mysql -uroot -proot
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 7
+Server version: 5.1.73 Source distribution
+
+Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY 'root' WITH GRANT OPTION;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> Ctrl-C -- exit!
+Aborted
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# 
+[root@hadoop03 yum.repos.d]# service mysqld restart
+Stopping mysqld:  [  OK  ]
+Starting mysqld:  [  OK  ]
+[root@hadoop03 yum.repos.d]# 
+
+==============================================================================================
+MySQL数据库安装之后，出现乱码问题。
+问题描述：在linux上安装MySQL数据库之后，使用SecureCRT工具连接MySQL查询数据，数据中出现中文乱码问题：
+
+[root@hadoop03 ~]# mysql -uroot -p
+Enter password: 
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 3
+Server version: 5.1.73 Source distribution
+
+Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> use taotao;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> show tales;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'tales' at line 1
+mysql> show tables;
++---------------------+
+| Tables_in_taotao    |
++---------------------+
+| tb_content          |
+| tb_content_category |
+| tb_item             |
+| tb_item_cat         |
+| tb_item_desc        |
+| tb_item_param       |
+| tb_item_param_item  |
+| tb_order            |
+| tb_order_item       |
+| tb_order_shipping   |
+| tb_user             |
++---------------------+
+11 rows in set (0.00 sec)
+
+mysql> select * from tb_item limit 1;
++-----------------+---------------------------------+---------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| id              | title                           | sell_point                      | price | num | barcode | image                                                                                                                                                                               | cid | status | created             | updated             |
++-----------------+---------------------------------+---------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| 148294659268204 | TCL D48A261 48?? ???? ??TV ???? | TCL D48A261 48?? ???? ??TV ???? | 89900 | 999 |         | http://hadoop01:8088/images/2016/12/28/1482946504821995.jpg,http://hadoop01:8088/images/2016/12/28/1482946505522895.jpg,http://hadoop01:8088/images/2016/12/28/1482946505646369.jpg | 560 |      1 | 2016-12-28 09:36:32 | 2016-12-28 09:36:32 |
++-----------------+---------------------------------+---------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+1 row in set (0.00 sec)
+
+mysql> show variables like '%character%';
++--------------------------+----------------------------+
+| Variable_name            | Value                      |
++--------------------------+----------------------------+
+| character_set_client     | latin1                     |
+| character_set_connection | latin1                     |
+| character_set_database   | latin1                     |
+| character_set_filesystem | binary                     |
+| character_set_results    | latin1                     |
+| character_set_server     | latin1                     |
+| character_set_system     | utf8                       |
+| character_sets_dir       | /usr/share/mysql/charsets/ |
++--------------------------+----------------------------+
+8 rows in set (0.00 sec)
+
+mysql> 
+
+
+
+下面是解决乱码问题的整个过程：
+
+[root@hadoop03 ~]# vi /etc/my.cnf 
+[mysqld]
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+user=mysql
+# Disabling symbolic-links is recommended to prevent assorted security risks
+symbolic-links=0
+
+default-character-set = utf8
+
+[mysqld_safe]
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+
+
+
+# set mysql character_set
+[client]
+default-character-set = utf8
+~
+~
+~
+"/etc/my.cnf" 18L, 348C written
+[root@hadoop03 ~]#  /etc/init.d/mysqld restart
+Stopping mysqld:  [  OK  ]
+Starting mysqld:  [  OK  ]
+[root@hadoop03 ~]# 
+
+
+mysql> show variables like '%character%';
+ERROR 2006 (HY000): MySQL server has gone away
+No connection. Trying to reconnect...
+Connection id:    2
+Current database: *** NONE ***
+
++--------------------------+----------------------------+
+| Variable_name            | Value                      |
++--------------------------+----------------------------+
+| character_set_client     | latin1                     |
+| character_set_connection | latin1                     |
+| character_set_database   | utf8                       |
+| character_set_filesystem | binary                     |
+| character_set_results    | latin1                     |
+| character_set_server     | utf8                       |
+| character_set_system     | utf8                       |
+| character_sets_dir       | /usr/share/mysql/charsets/ |
++--------------------------+----------------------------+
+8 rows in set (0.00 sec)
+
+mysql>
+mysql> SET character_set_client = utf8;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SET character_set_connection = utf8;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SET character_set_results = utf8;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> show variables like '%character%';
++--------------------------+----------------------------+
+| Variable_name            | Value                      |
++--------------------------+----------------------------+
+| character_set_client     | utf8                       |
+| character_set_connection | utf8                       |
+| character_set_database   | utf8                       |
+| character_set_filesystem | binary                     |
+| character_set_results    | utf8                       |
+| character_set_server     | utf8                       |
+| character_set_system     | utf8                       |
+| character_sets_dir       | /usr/share/mysql/charsets/ |
++--------------------------+----------------------------+
+8 rows in set (0.00 sec)
+
+
+然后重启一下mysql服务：
+[root@hadoop03 ~]#  /etc/init.d/mysqld restart
+Stopping mysqld:  [  OK  ]
+Starting mysqld:  [  OK  ]
+
+
+
+重新使用SecureCRT工具连接MySQL再次查询数据，还是乱码，但是这次的乱码和上次不一样了：
+mysql> select * from tb_item limit 1;
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| id              | title                                                   | sell_point                                              | price | num | barcode | image                                                                                                                                                                               | cid | status | created             | updated             |
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| 148294659268204 | TCL D48A261 48鑻卞 寰俊鐢佃 寰俊TV 娴烽噺鐖卞 | TCL D48A261 48鑻卞 寰俊鐢佃 寰俊TV 娴烽噺鐖卞 | 89900 | 999 |         | http://hadoop01:8088/images/2016/12/28/1482946504821995.jpg,http://hadoop01:8088/images/2016/12/28/1482946505522895.jpg,http://hadoop01:8088/images/2016/12/28/1482946505646369.jpg | 560 |      1 | 2016-12-28 09:36:32 | 2016-12-28 09:36:32 |
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+1 row in set (0.00 sec)
+
+mysql>
+
+猜想可能是SecureCRT客户端工具的编码设置有问题，所以设置一下SecureCRT客户端的字符编码；
+选择菜单中的Options->Session-Options->Appearance，然后找到右侧的Character-encoding，将其设置为UTF-8即可。
+下面使用SecureCRT工具连接MySQL再次查询数据，乱码问题解决：
+
+
+mysql> select * from tb_item limit 1;
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| id              | title                                                   | sell_point                                              | price | num | barcode | image                                                                                                                                                                               | cid | status | created             | updated             |
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+| 148294659268204 | TCL D48A261 48英寸 微信电视 微信TV 海量爱奇 | TCL D48A261 48英寸 微信电视 微信TV 海量爱奇 | 89900 | 999 |         | http://hadoop01:8088/images/2016/12/28/1482946504821995.jpg,http://hadoop01:8088/images/2016/12/28/1482946505522895.jpg,http://hadoop01:8088/images/2016/12/28/1482946505646369.jpg | 560 |      1 | 2016-12-28 09:36:32 | 2016-12-28 09:36:32 |
++-----------------+---------------------------------------------------------+---------------------------------------------------------+-------+-----+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----+--------+---------------------+---------------------+
+1 row in set (0.00 sec)
+
+mysql> 
+
+
+
+
+
+
+
+

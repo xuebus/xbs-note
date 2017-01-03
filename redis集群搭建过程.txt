@@ -1,0 +1,740 @@
+linux环境下redis集群的搭建全过程：
+
+使用mount命令将光盘挂载到/mnt/cdrom目录下：
+[root@hadoop03 ~]# mount -t iso9660 -o ro /dev/cdrom /mnt/cdrom
+
+使用yum安装redis的编译环境gcc-c++：
+[root@hadoop03 ~]# yum install gcc-c++
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Loading mirror speeds from cached hostfile
+Resolving Dependencies
+--> Running transaction check
+---> Package gcc-c++.x86_64 0:4.4.7-16.el6 will be installed
+--> Processing Dependency: libstdc++-devel = 4.4.7-16.el6 for package: gcc-c++-4.4.7-16.el6.x86_64
+--> Running transaction check
+---> Package libstdc++-devel.x86_64 0:4.4.7-16.el6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                                     Arch                               Version                                     Repository                            Size
+=======================================================================================================================================================================
+Installing:
+ gcc-c++                                     x86_64                             4.4.7-16.el6                                c6-media                             4.7 M
+Installing for dependencies:
+ libstdc++-devel                             x86_64                             4.4.7-16.el6                                c6-media                             1.6 M
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       2 Package(s)
+
+Total download size: 6.3 M
+Installed size: 20 M
+Is this ok [y/N]: y
+Downloading Packages:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                   25 MB/s | 6.3 MB     00:00     
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Installing : libstdc++-devel-4.4.7-16.el6.x86_64                                                                                                                 1/2 
+  Installing : gcc-c++-4.4.7-16.el6.x86_64                                                                                                                         2/2 
+  Verifying  : libstdc++-devel-4.4.7-16.el6.x86_64                                                                                                                 1/2 
+  Verifying  : gcc-c++-4.4.7-16.el6.x86_64                                                                                                                         2/2 
+
+Installed:
+  gcc-c++.x86_64 0:4.4.7-16.el6                                                                                                                                        
+
+Dependency Installed:
+  libstdc++-devel.x86_64 0:4.4.7-16.el6                                                                                                                                
+
+Complete!
+
+[root@hadoop03 ~]# yum list |grep ruby
+graphviz-ruby.x86_64                     2.26.0-10.el6                 c6-media 
+libselinux-ruby.x86_64                   2.0.94-5.8.el6                c6-media 
+openwsman-ruby.x86_64                    2.2.3-8.el6                   c6-media 
+rrdtool-ruby.x86_64                      1.3.8-7.el6                   c6-media 
+ruby.x86_64                              1.8.7.374-4.el6_6             c6-media 
+ruby-devel.i686                          1.8.7.374-4.el6_6             c6-media 
+ruby-devel.x86_64                        1.8.7.374-4.el6_6             c6-media 
+ruby-docs.x86_64                         1.8.7.374-4.el6_6             c6-media 
+ruby-flexmock.noarch                     0.8.6-1.1.el6                 c6-media 
+ruby-irb.x86_64                          1.8.7.374-4.el6_6             c6-media 
+ruby-libguestfs.x86_64                   1:1.20.11-14.el6              c6-media 
+ruby-libs.i686                           1.8.7.374-4.el6_6             c6-media 
+ruby-libs.x86_64                         1.8.7.374-4.el6_6             c6-media 
+ruby-qpid.x86_64                         0.7.946106-2.el6              c6-media 
+ruby-qpid-qmf.x86_64                     0.14-14.el6_3                 c6-media 
+ruby-rdoc.x86_64                         1.8.7.374-4.el6_6             c6-media 
+ruby-ri.x86_64                           1.8.7.374-4.el6_6             c6-media 
+ruby-saslwrapper.x86_64                  0.14-1.el6                    c6-media 
+ruby-static.x86_64                       1.8.7.374-4.el6_6             c6-media 
+ruby-tcltk.x86_64                        1.8.7.374-4.el6_6             c6-media 
+rubygem-flexmock.noarch                  0.8.6-1.1.el6                 c6-media 
+rubygem-flexmock-doc.noarch              0.8.6-1.1.el6                 c6-media 
+rubygem-rake.noarch                      0.8.7-2.1.el6                 c6-media 
+rubygems.noarch                          1.3.7-5.el6                   c6-media 
+rubygems-devel.noarch                    1.3.7-5.el6                   c6-media 
+subversion-ruby.i686                     1.6.11-14.el6                 c6-media 
+subversion-ruby.x86_64                   1.6.11-14.el6                 c6-media 
+
+使用yum安装ruby：
+[root@hadoop03 ~]# yum install ruby -y
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Loading mirror speeds from cached hostfile
+Resolving Dependencies
+--> Running transaction check
+---> Package ruby.x86_64 0:1.8.7.374-4.el6_6 will be installed
+--> Processing Dependency: ruby-libs = 1.8.7.374-4.el6_6 for package: ruby-1.8.7.374-4.el6_6.x86_64
+--> Processing Dependency: libruby.so.1.8()(64bit) for package: ruby-1.8.7.374-4.el6_6.x86_64
+--> Running transaction check
+---> Package ruby-libs.x86_64 0:1.8.7.374-4.el6_6 will be installed
+--> Processing Dependency: libreadline.so.5()(64bit) for package: ruby-libs-1.8.7.374-4.el6_6.x86_64
+--> Running transaction check
+---> Package compat-readline5.x86_64 0:5.2-17.1.el6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                                     Arch                              Version                                       Repository                           Size
+=======================================================================================================================================================================
+Installing:
+ ruby                                        x86_64                            1.8.7.374-4.el6_6                             c6-media                            538 k
+Installing for dependencies:
+ compat-readline5                            x86_64                            5.2-17.1.el6                                  c6-media                            130 k
+ ruby-libs                                   x86_64                            1.8.7.374-4.el6_6                             c6-media                            1.7 M
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       3 Package(s)
+
+Total download size: 2.3 M
+Installed size: 7.8 M
+Downloading Packages:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                  6.3 MB/s | 2.3 MB     00:00     
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Installing : compat-readline5-5.2-17.1.el6.x86_64                                                                                                                1/3 
+  Installing : ruby-libs-1.8.7.374-4.el6_6.x86_64                                                                                                                  2/3 
+  Installing : ruby-1.8.7.374-4.el6_6.x86_64                                                                                                                       3/3 
+  Verifying  : compat-readline5-5.2-17.1.el6.x86_64                                                                                                                1/3 
+  Verifying  : ruby-libs-1.8.7.374-4.el6_6.x86_64                                                                                                                  2/3 
+  Verifying  : ruby-1.8.7.374-4.el6_6.x86_64                                                                                                                       3/3 
+
+Installed:
+  ruby.x86_64 0:1.8.7.374-4.el6_6                                                                                                                                      
+
+Dependency Installed:
+  compat-readline5.x86_64 0:5.2-17.1.el6                                              ruby-libs.x86_64 0:1.8.7.374-4.el6_6                                             
+
+Complete!
+
+使用yum安装rubygems：
+[root@hadoop03 ~]# yum install rubygems -y
+Loaded plugins: fastestmirror, refresh-packagekit, security
+Setting up Install Process
+Loading mirror speeds from cached hostfile
+Resolving Dependencies
+--> Running transaction check
+---> Package rubygems.noarch 0:1.3.7-5.el6 will be installed
+--> Processing Dependency: ruby-rdoc for package: rubygems-1.3.7-5.el6.noarch
+--> Running transaction check
+---> Package ruby-rdoc.x86_64 0:1.8.7.374-4.el6_6 will be installed
+--> Processing Dependency: ruby-irb = 1.8.7.374-4.el6_6 for package: ruby-rdoc-1.8.7.374-4.el6_6.x86_64
+--> Running transaction check
+---> Package ruby-irb.x86_64 0:1.8.7.374-4.el6_6 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+=======================================================================================================================================================================
+ Package                                Arch                                Version                                        Repository                             Size
+=======================================================================================================================================================================
+Installing:
+ rubygems                               noarch                              1.3.7-5.el6                                    c6-media                              207 k
+Installing for dependencies:
+ ruby-irb                               x86_64                              1.8.7.374-4.el6_6                              c6-media                              317 k
+ ruby-rdoc                              x86_64                              1.8.7.374-4.el6_6                              c6-media                              381 k
+
+Transaction Summary
+=======================================================================================================================================================================
+Install       3 Package(s)
+
+Total download size: 905 k
+Installed size: 3.0 M
+Downloading Packages:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                   11 MB/s | 905 kB     00:00     
+Running rpm_check_debug
+Running Transaction Test
+Transaction Test Succeeded
+Running Transaction
+  Installing : ruby-irb-1.8.7.374-4.el6_6.x86_64                                                                                                                   1/3 
+  Installing : ruby-rdoc-1.8.7.374-4.el6_6.x86_64                                                                                                                  2/3 
+  Installing : rubygems-1.3.7-5.el6.noarch                                                                                                                         3/3 
+  Verifying  : ruby-rdoc-1.8.7.374-4.el6_6.x86_64                                                                                                                  1/3 
+  Verifying  : ruby-irb-1.8.7.374-4.el6_6.x86_64                                                                                                                   2/3 
+  Verifying  : rubygems-1.3.7-5.el6.noarch                                                                                                                         3/3 
+
+Installed:
+  rubygems.noarch 0:1.3.7-5.el6                                                                                                                                        
+
+Dependency Installed:
+  ruby-irb.x86_64 0:1.8.7.374-4.el6_6                                               ruby-rdoc.x86_64 0:1.8.7.374-4.el6_6                                              
+
+Complete!
+
+[root@hadoop03 ~]# cd /root/apps/taotao/
+[root@hadoop03 taotao]# ll
+total 1392
+-rw-r--r--. 1 root root   57856 Dec 29 05:14 redis-3.0.0.gem
+-rw-r--r--. 1 root root 1358081 Dec 29 05:14 redis-3.0.0.tar.gz
+drwxr-xr-x. 9 root root    4096 Dec 27 17:51 tomcat-manager-8080
+
+使用gem install命令安装redis-3.0.0.gem：
+[root@hadoop03 taotao]# gem install redis-3.0.0.gem
+Successfully installed redis-3.0.0
+1 gem installed
+Installing ri documentation for redis-3.0.0...
+Installing RDoc documentation for redis-3.0.0...
+
+使用tar -zxvf命令来解压redis-3.0.0.tar.gz这个源码包：
+[root@hadoop03 taotao]# tar -zxvf redis-3.0.0.tar.gz 
+.............
+.............
+.............
+[root@hadoop03 taotao]# ll
+total 1396
+drwxrwxr-x. 6 root root    4096 Apr  1  2015 redis-3.0.0
+-rw-r--r--. 1 root root   57856 Dec 29 05:14 redis-3.0.0.gem
+-rw-r--r--. 1 root root 1358081 Dec 29 05:14 redis-3.0.0.tar.gz
+drwxr-xr-x. 9 root root    4096 Dec 27 17:51 tomcat-manager-8080
+
+进入到redis-3.0.0目录下面，使用make命令编译redis源码：
+[root@hadoop03 taotao]# cd redis-3.0.0
+[root@hadoop03 redis-3.0.0]# make
+.............
+.............
+.............
+LINK redis-server
+INSTALL redis-sentinel
+CC redis-cli.o
+LINK redis-cli
+CC redis-benchmark.o
+LINK redis-benchmark
+CC redis-check-dump.o
+LINK redis-check-dump
+CC redis-check-aof.o
+LINK redis-check-aof
+
+
+使用make install命令安装redis，并使用PREFIX指定要把redis安装到/root/apps/taotao/redis-taotao目录下：
+[root@hadoop03 redis-3.0.0]# make install PREFIX=/root/apps/taotao/redis-taotao
+cd src && make install
+make[1]: Entering directory `/root/apps/taotao/redis-3.0.0/src'
+
+Hint: It's a good idea to run 'make test' ;)
+
+    INSTALL install
+    INSTALL install
+    INSTALL install
+    INSTALL install
+    INSTALL install
+make[1]: Leaving directory `/root/apps/taotao/redis-3.0.0/src'
+[root@hadoop03 redis-3.0.0]# cd /root/apps/taotao/
+[root@hadoop03 taotao]# ll
+total 1400
+drwxrwxr-x. 6 root root    4096 Apr  1  2015 redis-3.0.0
+-rw-r--r--. 1 root root   57856 Dec 29 05:14 redis-3.0.0.gem
+-rw-r--r--. 1 root root 1358081 Dec 29 05:14 redis-3.0.0.tar.gz
+drwxr-xr-x. 3 root root    4096 Dec 29 06:11 redis-taotao
+drwxr-xr-x. 9 root root    4096 Dec 27 17:51 tomcat-manager-8080
+[root@hadoop03 taotao]# cd redis-taotao/
+[root@hadoop03 redis-taotao]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 29 06:11 bin
+[root@hadoop03 redis-taotao]# cd bin/
+[root@hadoop03 bin]# ll
+total 15440
+-rwxr-xr-x. 1 root root 4588878 Dec 29 06:11 redis-benchmark
+-rwxr-xr-x. 1 root root   22185 Dec 29 06:11 redis-check-aof
+-rwxr-xr-x. 1 root root   45403 Dec 29 06:11 redis-check-dump
+-rwxr-xr-x. 1 root root 4691785 Dec 29 06:11 redis-cli
+lrwxrwxrwx. 1 root root      12 Dec 29 06:11 redis-sentinel -> redis-server
+-rwxr-xr-x. 1 root root 6450305 Dec 29 06:11 redis-server
+
+把redis-3.0.0源码目录下面的redis.conf文件拷贝到/root/apps/taotao/redis-taotao/bin目录下：
+[root@hadoop03 bin]# cp /root/apps/taotao/redis-3.0.0/redis.conf .
+[root@hadoop03 bin]# ll
+total 15484
+-rwxr-xr-x. 1 root root 4588878 Dec 29 06:11 redis-benchmark
+-rwxr-xr-x. 1 root root   22185 Dec 29 06:11 redis-check-aof
+-rwxr-xr-x. 1 root root   45403 Dec 29 06:11 redis-check-dump
+-rwxr-xr-x. 1 root root 4691785 Dec 29 06:11 redis-cli
+-rw-r--r--. 1 root root   41403 Dec 29 06:15 redis.conf
+lrwxrwxrwx. 1 root root      12 Dec 29 06:11 redis-sentinel -> redis-server
+-rwxr-xr-x. 1 root root 6450305 Dec 29 06:11 redis-server
+[root@hadoop03 bin]# 
+
+使用vi命令编辑redis.conf文件，将其中的配置参数"daemonize no"修改成"daemonize yes"，表示开启redis服务器的后台启动模式：
+[root@hadoop03 bin]# vi redis.conf 
+# Redis configuration file example
+
+# Note on units: when memory size is needed, it is possible to specify
+# it in the usual form of 1k 5GB 4M and so forth:
+#
+# 1k => 1000 bytes
+# 1kb => 1024 bytes
+# 1m => 1000000 bytes
+# 1mb => 1024*1024 bytes
+# 1g => 1000000000 bytes
+# 1gb => 1024*1024*1024 bytes
+#
+# units are case insensitive so 1GB 1Gb 1gB are all the same.
+
+################################## INCLUDES ###################################
+
+# Include one or more other config files here.  This is useful if you
+# have a standard template that goes to all Redis servers but also need
+# to customize a few per-server settings.  Include files can include
+# other files, so use this wisely.
+#
+# Notice option "include" won't be rewritten by command "CONFIG REWRITE"
+# from admin or Redis Sentinel. Since Redis always uses the last processed
+# line as value of a configuration directive, you'd better put includes
+# at the beginning of this file to avoid overwriting config change at runtime.
+#
+# If instead you are interested in using includes to override configuration
+# options, it is better to use include as the last line.
+#
+# include /path/to/local.conf
+# include /path/to/other.conf
+
+################################ GENERAL  #####################################
+
+# By default Redis does not run as a daemon. Use 'yes' if you need it.
+# Note that Redis will write a pid file in /var/run/redis.pid when daemonized.
+daemonize yes
+
+...............
+...............
+...............
+...............
+[root@hadoop03 bin]# 
+
+使用redis-server命令后面跟上redis.conf配置文件，就可以以后台模式启动redis服务器：
+[root@hadoop03 bin]# ./redis-server redis.conf 
+
+查看redis的进程，说明redis服务器已经成功启动，其默认的端口号为6379：
+[root@hadoop03 bin]# ps aux|grep redis
+root       4251  0.1  0.3 137448  7544 ?        Ssl  04:58   0:09 bin/redis-server *:6379    
+root       7275  0.0  0.0 103308   852 pts/1    S+   06:27   0:00 grep redis
+[root@hadoop03 bin]# 
+
+启动redis的客户端：
+[root@hadoop03 bin]# ./redis-cli 
+
+下面是redis的一些常用命令：
+127.0.0.1:6379> ping
+PONG
+127.0.0.1:6379> set a 10
+OK
+127.0.0.1:6379> get a
+"10"
+127.0.0.1:6379> keys *
+1) "a"
+
+让a加1的命令是incr：
+127.0.0.1:6379> incr a
+(integer) 11
+
+让a减1的命令是decr：
+127.0.0.1:6379> decr a
+(integer) 10
+127.0.0.1:6379> del a
+(integer) 1
+127.0.0.1:6379> keys *
+(empty list or set)
+127.0.0.1:6379> 
+[root@hadoop03 bin]# 
+
+然后是redis的常用数据类型是String,Hash,List,Set,SortedSet（其中的List和SortedSet比较耗费性能，因为它们要排序，
+我们比较常用的数据类型是String和Hash，因为它们都是key-value类型的）。
+
+[root@hadoop03 bin]# ll
+total 15484
+-rwxr-xr-x. 1 root root 4588878 Dec 29 06:11 redis-benchmark
+-rwxr-xr-x. 1 root root   22185 Dec 29 06:11 redis-check-aof
+-rwxr-xr-x. 1 root root   45403 Dec 29 06:11 redis-check-dump
+-rwxr-xr-x. 1 root root 4691785 Dec 29 06:11 redis-cli
+-rw-r--r--. 1 root root   41404 Dec 29 06:23 redis.conf
+lrwxrwxrwx. 1 root root      12 Dec 29 06:11 redis-sentinel -> redis-server
+-rwxr-xr-x. 1 root root 6450305 Dec 29 06:11 redis-server
+[root@hadoop03 bin]# cd ..
+[root@hadoop03 redis-taotao]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 29 06:23 bin
+[root@hadoop03 redis-taotao]# cd ..
+[root@hadoop03 taotao]# ll
+total 1400
+drwxrwxr-x. 6 root root    4096 Apr  1  2015 redis-3.0.0
+-rw-r--r--. 1 root root   57856 Dec 29 05:14 redis-3.0.0.gem
+-rw-r--r--. 1 root root 1358081 Dec 29 05:14 redis-3.0.0.tar.gz
+drwxr-xr-x. 3 root root    4096 Dec 29 06:11 redis-taotao
+drwxr-xr-x. 9 root root    4096 Dec 27 17:51 tomcat-manager-8080
+[root@hadoop03 taotao]# mkdir redis-cluster
+[root@hadoop03 taotao]# ll
+total 1404
+drwxrwxr-x. 6 root root    4096 Apr  1  2015 redis-3.0.0
+-rw-r--r--. 1 root root   57856 Dec 29 05:14 redis-3.0.0.gem
+-rw-r--r--. 1 root root 1358081 Dec 29 05:14 redis-3.0.0.tar.gz
+drwxr-xr-x. 2 root root    4096 Dec 29 06:39 redis-cluster
+drwxr-xr-x. 3 root root    4096 Dec 29 06:11 redis-taotao
+drwxr-xr-x. 9 root root    4096 Dec 27 17:51 tomcat-manager-8080
+[root@hadoop03 taotao]# cp -r redis-taotao/bin/ redis-cluster/redis01
+[root@hadoop03 taotao]# cd redis-cluster/
+[root@hadoop03 redis-cluster]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 29 06:43 redis01
+[root@hadoop03 redis-cluster]# cd redis01/
+[root@hadoop03 redis01]# ll
+total 15484
+-rwxr-xr-x. 1 root root 4588878 Dec 29 06:43 redis-benchmark
+-rwxr-xr-x. 1 root root   22185 Dec 29 06:43 redis-check-aof
+-rwxr-xr-x. 1 root root   45403 Dec 29 06:43 redis-check-dump
+-rwxr-xr-x. 1 root root 4691785 Dec 29 06:43 redis-cli
+-rw-r--r--. 1 root root   41404 Dec 29 06:43 redis.conf
+lrwxrwxrwx. 1 root root      12 Dec 29 06:43 redis-sentinel -> redis-server
+-rwxr-xr-x. 1 root root 6450305 Dec 29 06:43 redis-server
+[root@hadoop03 redis01]# vi redis.conf
+..................
+..................
+..................
+..................
+修改两个地方，一个把端口号"port 6379"改为"port 7001"（为了搭建redis集群，
+我们需要创建6个redis实例，这6个redis实例的端口分别为7001~7006）；
+还要修改一个地方，把配置文件中"# cluster-enabled yes"的注释打开，也就是把前面的"#"去掉，表示开启redis的集群模式：（由于这个redis.conf配置文件的内容非常多，在修改某项配置的时候，如果你不熟悉vi的常用命令，就会很麻烦。这里说一下如何在vi命令下查找指定的配置项，首先使用"vi redis.conf"命令进入配置文件内部，此时先不要进入编辑模式，我们以修改"# cluster-enabled yes"为例来进行说明，首先按"/"键可以进入查找模式，输入"cluster"关键字，然后按回车或者按小写的"n"键，可以向下查找该关键字，按大写的"N"键可以向上查找，等找到之后，按键盘左上角的"ESC"键可以退出查找模式，然后再按"i"键进入到文本编辑模式，这样就可以修改文件内容了。修改完，再按"ESC"键退出编辑模式，最后输入":wq"保存退出即可）
+
+[root@hadoop03 redis01]# pwd
+/root/apps/taotao/redis-cluster/redis01
+[root@hadoop03 redis01]# ll
+total 15484
+-rwxr-xr-x. 1 root root 4588878 Dec 29 06:43 redis-benchmark
+-rwxr-xr-x. 1 root root   22185 Dec 29 06:43 redis-check-aof
+-rwxr-xr-x. 1 root root   45403 Dec 29 06:43 redis-check-dump
+-rwxr-xr-x. 1 root root 4691785 Dec 29 06:43 redis-cli
+-rw-r--r--. 1 root root   41402 Dec 29 06:57 redis.conf
+lrwxrwxrwx. 1 root root      12 Dec 29 06:43 redis-sentinel -> redis-server
+-rwxr-xr-x. 1 root root 6450305 Dec 29 06:43 redis-server
+[root@hadoop03 redis01]# cd ..
+[root@hadoop03 redis-cluster]# ll
+total 4
+drwxr-xr-x. 2 root root 4096 Dec 29 07:06 redis01
+
+将redis01这个实例拷贝5份，这样就有了6个redis实例了：
+[root@hadoop03 redis-cluster]# cp -r redis01/ redis02
+[root@hadoop03 redis-cluster]# cp -r redis01/ redis03
+[root@hadoop03 redis-cluster]# cp -r redis01/ redis04
+[root@hadoop03 redis-cluster]# cp -r redis01/ redis05
+[root@hadoop03 redis-cluster]# cp -r redis01/ redis06
+[root@hadoop03 redis-cluster]# ll
+total 24
+drwxr-xr-x. 2 root root 4096 Dec 29 07:06 redis01
+drwxr-xr-x. 2 root root 4096 Dec 29 07:07 redis02
+drwxr-xr-x. 2 root root 4096 Dec 29 07:07 redis03
+drwxr-xr-x. 2 root root 4096 Dec 29 07:07 redis04
+drwxr-xr-x. 2 root root 4096 Dec 29 07:07 redis05
+drwxr-xr-x. 2 root root 4096 Dec 29 07:07 redis06
+[root@hadoop03 redis-cluster]# 
+
+下面使用vi命令将redis02/reids.conf文件的端口号为7002，将redis03/reids.conf文件的端口号为7003，将redis04/reids.conf文件的端口号为7004，将redis05/reids.conf文件的端口号为7005，将redis06/reids.conf文件的端口号为7006。
+
+
+[root@hadoop03 redis-cluster]# cp /root/apps/taotao/redis-3.0.0/src/redis-trib.rb .
+[root@hadoop03 redis-cluster]# ll
+total 72
+drwxr-xr-x. 2 root root  4096 Dec 29 07:06 redis01
+drwxr-xr-x. 2 root root  4096 Dec 29 07:10 redis02
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis03
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis04
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis05
+drwxr-xr-x. 2 root root  4096 Dec 29 07:12 redis06
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+[root@hadoop03 redis-cluster]# vim start-all.sh
+cd redis01
+./redis-server redis.conf
+cd ../redis02
+./redis-server redis.conf
+cd ../redis03
+./redis-server redis.conf
+cd ../redis04
+./redis-server redis.conf
+cd ../redis05
+./redis-server redis.conf
+cd ../redis06
+./redis-server redis.conf
+
+~
+~
+~
+"start-all.sh" [New] 13L, 223C written                                                                                                               
+[root@hadoop03 redis-cluster]# ll
+total 76
+drwxr-xr-x. 2 root root  4096 Dec 29 07:06 redis01
+drwxr-xr-x. 2 root root  4096 Dec 29 07:10 redis02
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis03
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis04
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis05
+drwxr-xr-x. 2 root root  4096 Dec 29 07:12 redis06
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+-rw-r--r--. 1 root root   223 Dec 29 07:22 start-all.sh
+[root@hadoop03 redis-cluster]# chmod +x start-all.sh 
+[root@hadoop03 redis-cluster]# ll
+total 76
+drwxr-xr-x. 2 root root  4096 Dec 29 07:06 redis01
+drwxr-xr-x. 2 root root  4096 Dec 29 07:10 redis02
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis03
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis04
+drwxr-xr-x. 2 root root  4096 Dec 29 07:11 redis05
+drwxr-xr-x. 2 root root  4096 Dec 29 07:12 redis06
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+-rwxr-xr-x. 1 root root   223 Dec 29 07:22 start-all.sh
+[root@hadoop03 redis-cluster]# ./start-all.sh 
+[root@hadoop03 redis-cluster]# ps aux|grep redis
+root       7425  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7001 [cluster]
+root       7429  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7002 [cluster]
+root       7433  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7003 [cluster]
+root       7437  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7004 [cluster]
+root       7441  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7005 [cluster]
+root       7445  0.0  0.3 137440  7192 ?        Ssl  07:30   0:00 ./redis-server *:7006 [cluster]
+root       7449  0.0  0.0 103308   852 pts/1    S+   07:30   0:00 grep redis
+[root@hadoop03 redis-cluster]# ll
+total 76
+drwxr-xr-x. 2 root root  4096 Dec 29 07:23 redis01
+drwxr-xr-x. 2 root root  4096 Dec 29 07:28 redis02
+drwxr-xr-x. 2 root root  4096 Dec 29 07:28 redis03
+drwxr-xr-x. 2 root root  4096 Dec 29 07:28 redis04
+drwxr-xr-x. 2 root root  4096 Dec 29 07:27 redis05
+drwxr-xr-x. 2 root root  4096 Dec 29 07:27 redis06
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+-rwxr-xr-x. 1 root root   238 Dec 29 07:29 start-all.sh
+[root@hadoop03 redis-cluster]# ./redis-trib.rb create --replicas 1 hadoop03:7001 hadoop03:7002 hadoop03:7003 hadoop03:7004 hadoop03:7005  hadoop03:7006
+>>> Creating cluster
+Connecting to node hadoop03:7001: OK
+Connecting to node hadoop03:7002: OK
+Connecting to node hadoop03:7003: OK
+Connecting to node hadoop03:7004: OK
+Connecting to node hadoop03:7005: OK
+Connecting to node hadoop03:7006: OK
+>>> Performing hash slots allocation on 6 nodes...
+Using 3 masters:
+hadoop03:7001
+hadoop03:7002
+hadoop03:7003
+Adding replica hadoop03:7004 to hadoop03:7001
+Adding replica hadoop03:7005 to hadoop03:7002
+Adding replica hadoop03:7006 to hadoop03:7003
+M: 0fd6c1222175177b52ce67faae99667d7be2105b hadoop03:7001
+   slots:0-5460 (5461 slots) master
+M: 4cc89e4d921d0e6fc3860b2dbf718faa22b6b647 hadoop03:7002
+   slots:5461-10922 (5462 slots) master
+M: 868309d4d7277f125cc351aa13e95dd94838d77b hadoop03:7003
+   slots:10923-16383 (5461 slots) master
+S: c2c00c4198be8113d2d6a5b43d240114224afedb hadoop03:7004
+   replicates 0fd6c1222175177b52ce67faae99667d7be2105b
+S: 51fcf8b26a49dbeaf0cf1e784d38ca4b62112dce hadoop03:7005
+   replicates 4cc89e4d921d0e6fc3860b2dbf718faa22b6b647
+S: f65c49c522f236e31cd672f5d6f65aa3de38bcd9 hadoop03:7006
+   replicates 868309d4d7277f125cc351aa13e95dd94838d77b
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+/usr/lib/ruby/gems/1.8/gems/redis-3.0.0/lib/redis/client.rb:79:in `call': ERR Invalid node address specified: hadoop03:7001 (Redis::CommandError)
+        from /usr/lib/ruby/gems/1.8/gems/redis-3.0.0/lib/redis.rb:2190:in `method_missing'
+        from /usr/lib/ruby/gems/1.8/gems/redis-3.0.0/lib/redis.rb:36:in `synchronize'
+        from /usr/lib/ruby/1.8/monitor.rb:242:in `mon_synchronize'
+        from /usr/lib/ruby/gems/1.8/gems/redis-3.0.0/lib/redis.rb:36:in `synchronize'
+        from /usr/lib/ruby/gems/1.8/gems/redis-3.0.0/lib/redis.rb:2189:in `method_missing'
+        from ./redis-trib.rb:692:in `join_cluster'
+        from ./redis-trib.rb:690:in `each'
+        from ./redis-trib.rb:690:in `join_cluster'
+        from ./redis-trib.rb:1002:in `create_cluster_cmd'
+        from ./redis-trib.rb:1373:in `send'
+        from ./redis-trib.rb:1373
+[root@hadoop03 redis-cluster]# vim start-all.sh
+cd redis01
+./redis-server redis.conf
+cd ../
+cd redis02
+./redis-server redis.conf
+cd ../
+cd redis03
+./redis-server redis.conf
+cd ../
+cd redis04
+./redis-server redis.conf
+cd ../
+cd redis05
+./redis-server redis.conf
+cd ../
+cd redis06
+./redis-server redis.conf
+
+~
+~
+~
+"start-all.sh" 18L, 258C written
+[root@hadoop03 redis-cluster]# vim shutdown-all.sh
+redis01/redis-cli -p 7001 shutdown
+redis01/redis-cli -p 7002 shutdown
+redis01/redis-cli -p 7003 shutdown
+redis01/redis-cli -p 7004 shutdown
+redis01/redis-cli -p 7005 shutdown
+redis01/redis-cli -p 7006 shutdown
+~
+~
+~
+~
+"shutdown-all.sh" 6L, 210C written
+[root@hadoop03 redis-cluster]# ll
+total 80
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis01
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis02
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis03
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis04
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis05
+drwxr-xr-x. 2 root root  4096 Dec 29 08:40 redis06
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+-rwxr-xr-x. 1 root root   210 Dec 29 09:01 shutdown-all.sh
+-rwxr-xr-x. 1 root root   258 Dec 29 09:00 start-all.sh
+[root@hadoop03 redis-cluster]# ./start-all.sh 
+[root@hadoop03 redis-cluster]# ps aux|grep redis
+root       7717  0.1  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7001 [cluster]
+root       7721  0.0  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7002 [cluster]
+root       7725  0.1  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7003 [cluster]
+root       7729  0.1  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7004 [cluster]
+root       7733  1.0  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7005 [cluster]
+root       7737  1.1  0.3 137440  7204 ?        Ssl  09:01   0:00 ./redis-server *:7006 [cluster]
+root       7741  0.0  0.0 103308   852 pts/1    S+   09:02   0:00 grep redis
+[root@hadoop03 redis-cluster]# redis01/redis-cli -h hadoop03 -p 7001
+hadoop03:7001> keys *
+(empty list or set)
+hadoop03:7001> set a "hello"
+(error) CLUSTERDOWN The cluster is down
+hadoop03:7001> 
+
+这里在使用set命令的时候，发现报了一个错误，说集群宕机了。
+但是有人说在使用"./redis-trib.rb"脚本创建集群的时候不能使用hostname，只能使用ip地址。
+而我们上面再创建redis集群的时候使用了hostname，并且还报了如下错误（一开始没仔细看，意味redis集群创建成功了，晕死！）：
+"ERR Invalid node address specified: hadoop03:7001"
+所以这里只能把6个redis实例都删除，重新创建。
+然后在使用"./redis-trib.rb"脚本创建redis集群的时候，使用ip地址，而不再使用hostname了。
+===================================================================================
+
+
+[root@hadoop03 redis-cluster]# rm -rf redis0*
+[root@hadoop03 redis-cluster]# ll
+total 56
+-rwxr-xr-x. 1 root root 48141 Dec 29 07:17 redis-trib.rb
+-rwxr-xr-x. 1 root root   210 Dec 29 09:01 shutdown-all.sh
+-rwxr-xr-x. 1 root root   258 Dec 29 09:20 start-all.sh
+
+
+然后重新创建6个redis实例，并记得修改各自的redis.conf配置文件，创建的过程这里就不赘述了。
+创建好6个redis实例之后，启动6个redis服务器。然后使用如下命令创建redis机器：
+
+注意，在创建redis集群的时候，一定要先将6个redis实例都启动起来，否则会报如下错误：
+"[ERR] Sorry, can't connect to node localhost:7001"
+所以我们先使用自己编写的一个批量启动6个redis实例的脚本"start-all.sh"来启动：
+[root@hadoop03 redis-cluster]# ./start-all.sh 
+
+下面开始使用redis-trib.rb脚本来创建redis集群，注意这里我们不要使用hostname，而要使用ip地址，否则创建不成功：
+[root@hadoop03 redis-cluster]# ./redis-trib.rb create --replicas 1 192.168.71.13:7001 192.168.71.13:7002 192.168.71.13:7003 192.168.71.13:7004 192.168.71.13:7005  192.168.71.13:7006
+>>> Creating cluster
+Connecting to node 192.168.71.13:7001: OK
+Connecting to node 192.168.71.13:7002: OK
+Connecting to node 192.168.71.13:7003: OK
+Connecting to node 192.168.71.13:7004: OK
+Connecting to node 192.168.71.13:7005: OK
+Connecting to node 192.168.71.13:7006: OK
+>>> Performing hash slots allocation on 6 nodes...
+Using 3 masters:
+192.168.71.13:7001
+192.168.71.13:7002
+192.168.71.13:7003
+Adding replica 192.168.71.13:7004 to 192.168.71.13:7001
+Adding replica 192.168.71.13:7005 to 192.168.71.13:7002
+Adding replica 192.168.71.13:7006 to 192.168.71.13:7003
+M: da485e47257b52eb457272bbab16795c1bdcbc3d 192.168.71.13:7001
+   slots:0-5460 (5461 slots) master
+M: 33ae8f68dcf84547f8476a18b043b3e84f6a0321 192.168.71.13:7002
+   slots:5461-10922 (5462 slots) master
+M: 6ee499d8a897c632d006acc39d54e6ed6f48835b 192.168.71.13:7003
+   slots:10923-16383 (5461 slots) master
+S: 671ffee6f16eec82a1dfa1dc0a5b54cc559ed55b 192.168.71.13:7004
+   replicates da485e47257b52eb457272bbab16795c1bdcbc3d
+S: 399ee55a7a1feaa9d5b1219eac61800a4fbc4870 192.168.71.13:7005
+   replicates 33ae8f68dcf84547f8476a18b043b3e84f6a0321
+S: ca70f5e727e90bd9cf248d6eef3aabfcaf255bab 192.168.71.13:7006
+   replicates 6ee499d8a897c632d006acc39d54e6ed6f48835b
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join....
+>>> Performing Cluster Check (using node 192.168.71.13:7001)
+M: da485e47257b52eb457272bbab16795c1bdcbc3d 192.168.71.13:7001
+   slots:0-5460 (5461 slots) master
+M: 33ae8f68dcf84547f8476a18b043b3e84f6a0321 192.168.71.13:7002
+   slots:5461-10922 (5462 slots) master
+M: 6ee499d8a897c632d006acc39d54e6ed6f48835b 192.168.71.13:7003
+   slots:10923-16383 (5461 slots) master
+M: 671ffee6f16eec82a1dfa1dc0a5b54cc559ed55b 192.168.71.13:7004
+   slots: (0 slots) master
+   replicates da485e47257b52eb457272bbab16795c1bdcbc3d
+M: 399ee55a7a1feaa9d5b1219eac61800a4fbc4870 192.168.71.13:7005
+   slots: (0 slots) master
+   replicates 33ae8f68dcf84547f8476a18b043b3e84f6a0321
+M: ca70f5e727e90bd9cf248d6eef3aabfcaf255bab 192.168.71.13:7006
+   slots: (0 slots) master
+   replicates 6ee499d8a897c632d006acc39d54e6ed6f48835b
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+[root@hadoop03 redis-cluster]# 
+
+到这里，看到"[OK] All 16384 slots covered."的日志，说明我们的redis集群终于创建成功了。
+下面我们开始连接redis集群，这里只要使用任意一个redis客户端连接到redis集群中的任意一个redis节点都可以。
+注意这里连接的时候一定要指定"-c"这个参数，它表示集群。
+我们这里就使用redis01下面的redis-cli通过连接7002端口的redis节点进入redis集群：
+[root@hadoop03 redis-cluster]# redis01/redis-cli -h 192.168.71.13 -p 7002
+192.168.71.13:7002> keys *
+(empty list or set)
+192.168.71.13:7002> set a 10
+(error) MOVED 15495 192.168.71.13:7003
+192.168.71.13:7002> 
+[root@hadoop03 redis-cluster]# redis01/redis-cli -h 192.168.71.13 -p 7002 -c
+192.168.71.13:7002> keys *
+(empty list or set)
+192.168.71.13:7002> set a 10
+-> Redirected to slot [15495] located at 192.168.71.13:7003
+OK
+192.168.71.13:7003> get a
+"10"
+192.168.71.13:7003> 
+
+
+
+
+
